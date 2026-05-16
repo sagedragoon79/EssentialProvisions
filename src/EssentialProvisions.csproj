@@ -1,0 +1,83 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net46</TargetFramework>
+    <AssemblyName>EssentialProvisions</AssemblyName>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Version>1.0.0</Version>
+    <RootNamespace>EssentialProvisions</RootNamespace>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- MelonLoader (Mono / net35 build) -->
+    <Reference Include="MelonLoader">
+      <HintPath>$(GameDir)\Farthest Frontier (Mono)\MelonLoader\net35\MelonLoader.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(GameDir)\Farthest Frontier (Mono)\MelonLoader\net35\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="netstandard">
+      <HintPath>$(GameDir)\Farthest Frontier (Mono)\Farthest Frontier_Data\Managed\netstandard.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- Unity -->
+    <Reference Include="UnityEngine">
+      <HintPath>$(GameDir)\Farthest Frontier (Mono)\Farthest Frontier_Data\Managed\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GameDir)\Farthest Frontier (Mono)\Farthest Frontier_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(GameDir)\Farthest Frontier (Mono)\Farthest Frontier_Data\Managed\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(GameDir)\Farthest Frontier (Mono)\Farthest Frontier_Data\Managed\UnityEngine.UIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>$(GameDir)\Farthest Frontier (Mono)\Farthest Frontier_Data\Managed\Unity.TextMeshPro.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- Game assembly -->
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(GameDir)\Farthest Frontier (Mono)\Farthest Frontier_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+  </ItemGroup>
+
+  <!--
+    Build:
+      dotnet build src\EssentialProvisions.csproj -p:GameDir="G:\SteamLibrary\steamapps\common\Farthest Frontier"
+
+    Output: bin\Debug\EssentialProvisions.dll
+    Install: auto-copied to <game>\Farthest Frontier (Mono)\Mods\ on every successful build by the CopyToMods target below.
+  -->
+
+  <!--
+    Auto-stage to the Mods folder on every successful build. MelonLoader releases
+    the file handle, so the copy works even while the game is running — no need
+    to close FF between iterations.
+  -->
+  <Target Name="CopyToMods" AfterTargets="Build" Condition="'$(GameDir)' != ''">
+    <PropertyGroup>
+      <ModsDir>$(GameDir)\Farthest Frontier (Mono)\Mods</ModsDir>
+    </PropertyGroup>
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModsDir)" SkipUnchangedFiles="false" />
+    <Message Text="Staged $(TargetFileName) -&gt; $(ModsDir)" Importance="high" />
+  </Target>
+
+</Project>

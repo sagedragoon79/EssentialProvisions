@@ -1,0 +1,16 @@
+# Build output
+bin/
+obj/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Local research notes (kept out of public repo)
+_research/
+
+# OS / misc
+Thumbs.db
+.DS_Store
