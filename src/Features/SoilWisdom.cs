@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
 using MelonLoader;
 using TMPro;
@@ -44,6 +45,18 @@ namespace EssentialProvisions.Features
         private static readonly Color ColorWarning = new Color(1f, 0.84f, 0f);
 
         private static float _nextPollTime;
+
+        // CursorOverTooltip stores its tooltip prefab + parent in private
+        // [SerializeField]s. A from-scratch AddComponent leaves them null, so
+        // SetupInstance() bails ("No tooltipPrefab set") and no tooltip ever
+        // shows. We copy them off an existing working CursorOverTooltip in the
+        // same window. Fields cached once for the AppDomain.
+        private static readonly FieldInfo? TooltipPrefabField =
+            typeof(CursorOverTooltip).GetField("tooltipPrefab",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo? TooltipParentField =
+            typeof(CursorOverTooltip).GetField("tooltipParent",
+                BindingFlags.Instance | BindingFlags.NonPublic);
 
         public static void Reset()
         {
@@ -248,12 +261,28 @@ namespace EssentialProvisions.Features
             go.transform.SetSiblingIndex(yieldRow.GetSiblingIndex() + 1);
 
             // Add CursorOverTooltip + GenericTooltipDataProvider so hover wires
-            // the warning rows. Best-effort — if the types are missing, the
-            // summary text still renders, just no hover detail.
+            // the warning rows. CursorOverTooltip needs its private tooltipPrefab
+            // (and parent) populated or it bails in SetupInstance — copy those
+            // from a working CursorOverTooltip already in this window. Best-effort:
+            // if no donor is found, the summary text still renders, just no hover.
             try
             {
-                go.AddComponent<CursorOverTooltip>();
-                go.AddComponent<GenericTooltipDataProvider>();
+                var provider = go.AddComponent<GenericTooltipDataProvider>();
+                var tooltip  = go.AddComponent<CursorOverTooltip>();
+                tooltip.objectForPosition = rt;
+                tooltip.preferredOrientation = TooltipOrientation.Above;
+
+                var donor = FindTooltipDonor(window);
+                if (donor != null && TooltipPrefabField != null)
+                {
+                    TooltipPrefabField.SetValue(tooltip, TooltipPrefabField.GetValue(donor));
+                    if (TooltipParentField != null)
+                        TooltipParentField.SetValue(tooltip, TooltipParentField.GetValue(donor));
+                }
+                else
+                {
+                    Plugin.Log.Warning("[SoilWisdom] No donor CursorOverTooltip with a tooltipPrefab found in crop window — hover detail unavailable (summary text still shown).");
+                }
             }
             catch (Exception ex)
             {
@@ -261,6 +290,25 @@ namespace EssentialProvisions.Features
             }
 
             return tmp;
+        }
+
+        /// <summary>
+        /// Find a CursorOverTooltip already living in the crop window that has a
+        /// non-null tooltipPrefab — we steal its prefab/parent so our new tooltip
+        /// hooks into the same FF tooltip pipeline. The yield-factor info buttons
+        /// carry working tooltips, so a donor is normally present.
+        /// </summary>
+        private static CursorOverTooltip? FindTooltipDonor(UICropInfoWindow window)
+        {
+            if (TooltipPrefabField == null) return null;
+            var candidates = ((Component)window).GetComponentsInChildren<CursorOverTooltip>(true);
+            foreach (var c in candidates)
+            {
+                if (c == null) continue;
+                if (c.gameObject.name == "EP_SoilWisdomLabel") continue; // skip our own
+                if (TooltipPrefabField.GetValue(c) != null) return c;
+            }
+            return null;
         }
     }
 }

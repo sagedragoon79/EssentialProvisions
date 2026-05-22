@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.1 — 2026-05-22
+
+### Fixed
+- **Soil Wisdom** — the "⚠ N rotation issues — hover for details" line now
+  actually shows its hover tooltip. The tooltip component was created from
+  scratch without the game's `tooltipPrefab`, so FF silently skipped it; it now
+  borrows the prefab/parent from a working tooltip already in the crop window.
+
+### Changed
+- **Consumable Control** — quota recompute moved from a daily tick to a monthly
+  tick (the 30-day rolling average barely shifts day-to-day), and a per-storage
+  value cache now skips redundant `SetMinQuotaForItem` writes when the target is
+  unchanged. Big reduction in per-day work on large maps; behavior unchanged.
+
 ## 1.0.0 — 2026-05-15
 
 First public release. Sixteen opt-in QoL features across four categories,

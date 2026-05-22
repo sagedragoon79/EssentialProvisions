@@ -20,7 +20,7 @@
     <Platforms>AnyCPU;x64</Platforms>
 
     <!-- The one knob to bump on every release. -->
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
 
     <!-- Derived from <Version> so Explorer's hover tooltip + Properties
          dialog stay in lockstep. Suffixing .0 makes them legal 4-part
@@ -90,7 +90,7 @@
 
   <!--
     Build:
-      dotnet build src\EssentialProvisions.csproj -p:GameDir="G:\SteamLibrary\steamapps\common\Farthest Frontier"
+      dotnet build src\EssentialProvisions.csproj -p:GameDir="C:\Program Files (x86)\Steam\steamapps\common\Farthest Frontier"
 
     Output: bin\Debug\EssentialProvisions.dll
     Install: auto-copied to <game>\Farthest Frontier (Mono)\Mods\ on every successful build by the CopyToMods target below.
