@@ -80,6 +80,11 @@ namespace EssentialProvisions
         public static MelonPreferences_Entry<bool>   EnableSurplusSellingFood    { get; private set; } = null!;
         public static MelonPreferences_Entry<int>    SurplusSellingFoodMonths    { get; private set; } = null!;
 
+        // Shared diagnostic switch for the inventory features (Consumable Control +
+        // Surplus Selling). cfg-only; when true, both log per-item detail so you can
+        // verify rates, targets, and town stock breakdowns in Latest.log.
+        public static MelonPreferences_Entry<bool>   InventoryDiagnostics        { get; private set; } = null!;
+
         // ----- Self Preservation (folded from Cowardly Villagers by Olleus, with Hunter exclusion) -----
         public static MelonPreferences_Entry<bool>  EnableSelfPreservation   { get; private set; } = null!;
         public static MelonPreferences_Entry<float> SelfPreservationRadius   { get; private set; } = null!;
@@ -198,13 +203,15 @@ namespace EssentialProvisions
 
             EfficientLaborOccupations = _root.CreateEntry(
                 "EfficientLaborOccupations",
-                // Broad inclusion: all crafters, outdoor workers, builders.
+                // Broad inclusion: all crafters, outdoor workers, builders, plus
+                // animal-care roles (Herder at the Barn, Groomer at the Dog/Cat
+                // Kennel — both go haul when their animals need nothing).
                 // Excludes combat (Guard/Soldier/TransitionToSoldier), always-on-call service
                 // (Healer/Teacher/Priest/Trader/Grocer/Publican/Librarian/Scholar/Guildmaster),
                 // already-laborer roles (Laborer/WorkCampLaborer/NightsoilMan),
-                // special states (Child/Disabled/Deserter/None), DLC niches (Groomer),
+                // special states (Child/Disabled/Deserter/None),
                 // and RatCatcher (Penny Pincher covers it).
-                "Hunter,Builder,Woodcutter,Sawyer,Farmer,Baker,Tanner,Miller,Miner,Foundryman,Blacksmith,Fletcher,Fisherman,Cobbler,Smoker,Weaver,CharcoalMaker,Potter,BoatBuilder,Forager,Brewer,Wainwright,BasketMaker,Herder,FurnitureMaker,SoapMaker,Chandler,Glassmaker,Brickmaker,Cheesemaker,Cooper,Apothecary,Armourer,Arborist,Preservist,Papermaker,BookBinder",
+                "Hunter,Builder,Woodcutter,Sawyer,Farmer,Baker,Tanner,Miller,Miner,Foundryman,Blacksmith,Fletcher,Fisherman,Cobbler,Smoker,Weaver,CharcoalMaker,Potter,BoatBuilder,Forager,Brewer,Wainwright,BasketMaker,Herder,Groomer,FurnitureMaker,SoapMaker,Chandler,Glassmaker,Brickmaker,Cheesemaker,Cooper,Apothecary,Armourer,Arborist,Preservist,Papermaker,BookBinder",
                 display_name: "Efficient Labor: Allowed Occupations",
                 description: "Comma-separated list of FF Occupation enum names. Villagers in these occupations will be redirected to laborer work when truly idle. Edit this cfg field directly to add/remove occupations — not surfaced in the KC panel to keep it uncluttered. Restart the game for changes to apply.");
 
@@ -249,6 +256,11 @@ namespace EssentialProvisions
                 "SurplusSellingFoodMonths", 10,
                 display_name: "Surplus Selling: Keep-in-Town Months (food)",
                 description: "How many months of stock to keep in town storages for each food item. Default 10 matches FF's immigration threshold — recommended floor.");
+
+            InventoryDiagnostics = _root.CreateEntry(
+                "InventoryDiagnostics", false,
+                display_name: "Inventory Features: Diagnostic Logging",
+                description: "When true, Consumable Control and Surplus Selling log per-item detail each day — observed daily rate, computed keep-in-town / reserve target, current town stock (storage vs trading-post breakdown), and what was written where. cfg-only; not surfaced in the KC panel. Use it to verify the features are behaving, then turn it back off.");
 
             // ----- Self Preservation -----
             EnableSelfPreservation = _root.CreateEntry(

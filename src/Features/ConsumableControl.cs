@@ -98,6 +98,13 @@ namespace EssentialProvisions.Features
         private static bool _wasEnabled;
         private static string _lastParsedItemsRaw = "";
 
+        // Regular cadence is monthly, but we also do one catch-up apply on the
+        // first day after enabling that has consumption data — otherwise the
+        // reserve floor wouldn't exist for up to a month after you turn the
+        // feature on, leaving food unprotected (e.g. a trading post could pull
+        // every bean). Set false on enable; flipped true once we've applied.
+        private static bool _initialApplyDone;
+
         public static void Reset()
         {
             UnsubscribeIfSubscribed();
@@ -105,6 +112,7 @@ namespace EssentialProvisions.Features
             _trackers.Clear();
             _wasEnabled = false;
             _lastParsedItemsRaw = "";
+            _initialApplyDone = false;
         }
 
         /// <summary>
@@ -157,7 +165,8 @@ namespace EssentialProvisions.Features
                 em.AddListener<DayPassedEvent>(OnDayPassed);
                 em.AddListener<MonthPassedEvent>(OnMonthPassed);
                 _subscribed = true;
-                Plugin.Log.Msg($"[ConsumableControl] Tracking {_trackers.Count} item(s). Quotas recompute monthly; window rolls daily.");
+                _initialApplyDone = false;
+                Plugin.Log.Msg($"[ConsumableControl] Tracking {_trackers.Count} item(s). Initial reserve applies on the first day with data; refreshes monthly.");
             }
         }
 
@@ -206,14 +215,61 @@ namespace EssentialProvisions.Features
 
         private static void OnDayPassed(DayPassedEvent evt)
         {
-            // Daily: just roll the rolling-average window. Cheap — one queue
-            // enqueue/dequeue per tracked item. Quota recompute/push happens
-            // monthly (see OnMonthPassed) since a 30-day rolling avg barely
-            // moves day-to-day and the writes are the expensive part.
+            // Daily: roll the rolling-average window. Cheap — one queue
+            // enqueue/dequeue per tracked item. The regular recompute/push is
+            // monthly (a 30-day rolling avg barely moves day-to-day), EXCEPT
+            // for the one-time catch-up below so the reserve doesn't take up to
+            // a month to first appear after you enable the feature.
             foreach (var t in _trackers.Values) t.RollDay();
+
+            if (!_initialApplyDone && HasAnyData())
+            {
+                ApplyReserves("initial");
+                _initialApplyDone = true;
+            }
+
+            // Read-only daily diagnostic so behaviour is observable without
+            // waiting for the monthly apply tick.
+            if (Config.InventoryDiagnostics.Value) LogDiagnosticSnapshot();
         }
 
-        private static void OnMonthPassed(MonthPassedEvent evt)
+        private static bool HasAnyData()
+        {
+            foreach (var t in _trackers.Values)
+                if (t.Days > 0 && t.AverageDailyRate() > 0f) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Read-only: log each tracked item's observed rate and the reserve target
+        /// it WOULD compute, alongside the min-quota currently set on storages.
+        /// Does not change any quotas — purely for verification.
+        /// </summary>
+        private static void LogDiagnosticSnapshot()
+        {
+            var gm = UnitySingleton<GameManager>.Instance;
+            var rm = gm?.resourceManager;
+            if (rm == null) return;
+
+            int reserveMonths = Math.Max(1, Config.ConsumableReserveMonths.Value);
+            float headroom = 1f + Math.Max(0, Math.Min(50, Config.ConsumableHeadroomPercent.Value)) / 100f;
+            int foodStorageCount    = CollectFoodStorages(rm).Count;
+            int generalStorageCount = CollectGeneralStorages(rm).Count;
+
+            foreach (var kv in _trackers)
+            {
+                var tracker = kv.Value;
+                float rate = tracker.AverageDailyRate();
+                int target = (int)Math.Ceiling(rate * 30f * reserveMonths * headroom);
+                int count = FoodItems.Contains(kv.Key) ? foodStorageCount : generalStorageCount;
+                int perStorage = count > 0 ? (int)Math.Ceiling((double)target / count) : 0;
+                Plugin.Log.Msg($"[ConsumableControl][diag] {kv.Key}: rate {rate:0.00}/day ({tracker.Days}d data), reserve target {target} ({reserveMonths}mo) → {perStorage}/storage × {count} storage(s).");
+            }
+        }
+
+        private static void OnMonthPassed(MonthPassedEvent evt) => ApplyReserves("month");
+
+        private static void ApplyReserves(string cause)
         {
             if (!Config.EnableConsumableControl.Value) return;
             var gm = UnitySingleton<GameManager>.Instance;
@@ -244,6 +300,9 @@ namespace EssentialProvisions.Features
 
                 int perStorage = (int)Math.Ceiling((double)totalTarget / targets.Count);
 
+                if (Config.InventoryDiagnostics.Value)
+                    Plugin.Log.Msg($"[ConsumableControl][diag] APPLY {itemID}: rate {dailyRate:0.00}/day → reserve {totalTarget} ({reserveMonths}mo), {perStorage}/storage × {targets.Count} storage(s).");
+
                 foreach (var storage in targets)
                 {
                     if (storage == null) continue;
@@ -273,7 +332,7 @@ namespace EssentialProvisions.Features
             }
 
             if (writtenCount > 0 || skippedCount > 0)
-                Plugin.Log.Msg($"[ConsumableControl] Month tick: {writtenCount} quota update(s), {skippedCount} unchanged-skipped, across {foodStorages.Count} food + {generalStorages.Count} general storage(s).");
+                Plugin.Log.Msg($"[ConsumableControl] {cause} apply: {writtenCount} quota update(s), {skippedCount} unchanged-skipped, across {foodStorages.Count} food + {generalStorages.Count} general storage(s).");
         }
 
         // ----- Storage collection -----

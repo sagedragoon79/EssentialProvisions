@@ -58,11 +58,20 @@ namespace EssentialProvisions.Features
 
         // ----- Patches -----
 
+        // NOTE: these MUST be Prefixes, not Postfixes. StorageBuilding.Awake
+        // calls AddAllowableItems(), which reads the allowItem* flags ONCE and
+        // builds the building's allowableItems list. That happens inside the
+        // base.Awake() call at the top of Granary/Stockyard.Awake. A Postfix
+        // fires after the list is already built from the original (false)
+        // flags, so flipping a flag then has no effect — the building never
+        // learns it can store the new item. A Prefix runs before the method
+        // body, so the flag is already true when AddAllowableItems reads it.
+
         /// <summary>Granary: also accept Hay and Flax (Sensible Storage parity).</summary>
         [HarmonyPatch(typeof(Granary), "Awake")]
         internal static class GranaryAwakePatch
         {
-            private static void Postfix(Granary __instance)
+            private static void Prefix(Granary __instance)
             {
                 if (!Config.EnableBroadShelves.Value) return;
                 SetAllowItem(__instance, ref _allowItemHayField,  "Hay");
@@ -74,20 +83,47 @@ namespace EssentialProvisions.Features
         [HarmonyPatch(typeof(Stockyard), "Awake")]
         internal static class StockyardAwakePatch
         {
-            private static void Postfix(Stockyard __instance)
+            private static void Prefix(Stockyard __instance)
             {
                 if (!Config.EnableBroadShelves.Value) return;
                 SetAllowItem(__instance, ref _allowItemIronField, "Iron");
             }
         }
 
-        /// <summary>
-        /// Rename Granary → Silo in UI. Pattern adopted from Tended Wilds:
-        /// Postfix on Building.SetBuildingDataRecordName (private method;
-        /// called on construction + save load), cast to Resource, set
-        /// displayName. Zero runtime cost since this runs only when the
-        /// data record is set.
-        /// </summary>
+        // ----- Granary → "Silo" rename -----
+        //
+        // The displayName setter on Resource propagates to the building's
+        // widgetBlackboard (lazily created) and fires onDisplayNameChanged,
+        // which the UI binds to for its title. Tended Wilds renames Forager's
+        // Garden the same way and it works — but TW's rename fires on a tier-2
+        // *upgrade*, by which point the building + window are fully live.
+        //
+        // A Granary never upgrades, so SetBuildingDataRecordName fires only
+        // once at placement — early enough that the rename didn't stick in the
+        // selection panel. We therefore set displayName in TWO places:
+        //   1. SetBuildingDataRecordName postfix — catches placement + save
+        //      load, and updates the floating in-world name widget.
+        //   2. OnSelected prefix — re-applies "Silo" immediately before the
+        //      info window is (re)built, so the bottom panel title is always
+        //      correct no matter when the blackboard/window came online.
+
+        private const string SiloName = "Silo";
+
+        private static void ApplySiloName(Building building)
+        {
+            try
+            {
+                var resource = building as Resource;
+                if (resource != null && resource.displayName != SiloName)
+                    resource.displayName = SiloName;
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Warning($"[BroadShelves] Granary rename: {ex.Message}");
+            }
+        }
+
+        /// <summary>Set the name on construction / save load (also drives the in-world widget).</summary>
         [HarmonyPatch(typeof(Building), "SetBuildingDataRecordName")]
         internal static class BuildingNamePatch
         {
@@ -95,15 +131,24 @@ namespace EssentialProvisions.Features
             {
                 if (!Config.EnableBroadShelves.Value) return;
                 if (!(__instance is Granary)) return;
-                try
-                {
-                    var resource = __instance as Resource;
-                    if (resource != null) resource.displayName = "Silo";
-                }
-                catch (Exception ex)
-                {
-                    Plugin.Log.Warning($"[BroadShelves] Granary rename: {ex.Message}");
-                }
+                ApplySiloName(__instance);
+            }
+        }
+
+        /// <summary>
+        /// Re-apply just before the selection info window is built. OnSelected
+        /// is declared on Building and creates/shows the UIInfoWindow; running
+        /// as a Prefix guarantees displayName is "Silo" (and onDisplayNameChanged
+        /// fires) before the panel reads the title.
+        /// </summary>
+        [HarmonyPatch(typeof(Building), "OnSelected")]
+        internal static class BuildingSelectedNamePatch
+        {
+            private static void Prefix(Building __instance)
+            {
+                if (!Config.EnableBroadShelves.Value) return;
+                if (!(__instance is Granary)) return;
+                ApplySiloName(__instance);
             }
         }
     }

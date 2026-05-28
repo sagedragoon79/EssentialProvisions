@@ -2,27 +2,33 @@
 // to trading posts. Equivalent to FFAutomation's "Auto Stock" but driven by
 // observed consumption rate × months × headroom instead of fixed per-item ints.
 //
-// Pairs with Consumable Control:
-//   - Consumable Control sets min quota on granaries/cellars/storehouses,
-//     protecting a reserve from logistics outflow.
-//   - Surplus Selling sets min quota on TRADING POSTS, drawing excess away
-//     from town storages (which can only release what's above their own
-//     reserve quota). Net effect: items flow granary → trading post when
-//     town stock exceeds the keep-in-town target.
+// IMPORTANT — uses the trading post's NATIVE stocking lever, not storage quotas:
+//   The trading post does NOT stock via StorageQuotaHandler min-quotas (that's
+//   the storage-building reserve system). It stocks via its own targetStockCounts
+//   + keepInStock toggle (TradingPost.SetTargetStockAmount / SetKeepInStock).
+//   CheckWorkAvailabilityForTraderStockingItem creates the "stock the post" haul
+//   request only when targetStockCounts[item] != 0, hauling the item into
+//   traderStorage from anywhere in town. Worse, the post's own ProcessQuotasForItem
+//   zeroes any min-quota we set. So we set the post's target stock directly.
+//
+//   target_post_holding = total_town_stock − keep_in_town
+//   (SetTargetStockAmount is ABSOLUTE — the post holds up to this many — so the
+//   target already accounts for what's in the post; no "+ current post stock".)
+//   At equilibrium storage holds keep_in_town and the post holds the surplus.
+//
+// Authority: while enabled, Surplus Selling OWNS the target-stock + keep-in-stock
+// setting for every item it manages. It overwrites manual settings on those items
+// each day-tick. To hand-manage an item, keep Surplus Selling disabled.
 //
 // Food handling:
-//   - Default: skip food. FF rewards 10+ months food surplus with immigration;
-//     auto-shipping food at lower thresholds suppresses that.
+//   - Default: skip food. FF rewards 10+ months food surplus with immigration.
 //   - Opt-in food sub-toggle adds two safety nets:
-//       (1) aggregate: total_food_stock must exceed aggregate_target before
-//           ANY food gets shipped
-//       (2) per-type: each food item stays at ≥ 1 month of its own consumption
-//           even if aggregate allows shipping
-//     Prevents shipping bread out while berries / fruit are scarce → diet
-//     diversity stays intact, scurvy etc. avoided.
+//       (1) aggregate: total food stock must exceed an aggregate target before
+//           ANY food gets shipped;
+//       (2) per-type: each food item stays at ≥ 1 month of its own consumption.
 //
-// Mechanism: daily DayPassedEvent → compute target_tp_holding per item →
-// SetMinQuotaForItem on each trading post.
+// Mechanism: daily DayPassedEvent → compute target per item → SetTargetStockAmount
+// + SetKeepInStock(true) on each trading post (split across posts if modded to >1).
 
 using System;
 using System.Collections.Generic;
@@ -35,7 +41,6 @@ namespace EssentialProvisions.Features
     internal static class SurplusSelling
     {
         // Food classification — must match ConsumableControl's set exactly.
-        // (Slightly redundant; could be promoted to Common/ later if it diverges.)
         private static readonly HashSet<ItemID> FoodItems = new HashSet<ItemID>
         {
             ItemID.Bread, ItemID.RootVegetable, ItemID.Beans, ItemID.Greens,
@@ -45,8 +50,8 @@ namespace EssentialProvisions.Features
             ItemID.Preserves, ItemID.PreservedVeg,
         };
 
-        // (Trading post instance ID, ItemID) we've written. Cleanup on disable
-        // touches only these; manual quotas elsewhere preserved.
+        // (Trading post instance ID, ItemID) whose target-stock we set. On
+        // disable / sweep we reset only these back to 0 + keep-in-stock false.
         private struct PostItemKey : IEquatable<PostItemKey>
         {
             public int PostID;
@@ -56,8 +61,7 @@ namespace EssentialProvisions.Features
             public override bool Equals(object o) => o is PostItemKey k && Equals(k);
             public override int GetHashCode() => unchecked(PostID * 397 ^ (int)Item);
         }
-        private static readonly HashSet<PostItemKey> _writtenQuotas
-            = new HashSet<PostItemKey>();
+        private static readonly HashSet<PostItemKey> _managed = new HashSet<PostItemKey>();
 
         private static bool _subscribed;
         private static bool _wasEnabled;
@@ -65,7 +69,7 @@ namespace EssentialProvisions.Features
         public static void Reset()
         {
             UnsubscribeIfSubscribed();
-            ClearAllOurQuotas();
+            ClearAllManaged();
             _wasEnabled = false;
         }
 
@@ -75,7 +79,7 @@ namespace EssentialProvisions.Features
 
             if (!enabled && _wasEnabled)
             {
-                ClearAllOurQuotas();
+                ClearAllManaged();
                 UnsubscribeIfSubscribed();
             }
             _wasEnabled = enabled;
@@ -90,7 +94,7 @@ namespace EssentialProvisions.Features
             {
                 em.AddListener<DayPassedEvent>(OnDayPassed);
                 _subscribed = true;
-                Plugin.Log.Msg("[SurplusSelling] Active. Excess above keep-in-town target will flow to trading post(s) on each day-tick.");
+                Plugin.Log.Msg("[SurplusSelling] Active. Excess above keep-in-town target will be set as trading-post stock on each day-tick.");
             }
         }
 
@@ -103,7 +107,7 @@ namespace EssentialProvisions.Features
             _subscribed = false;
         }
 
-        // ----- Day tick: compute targets, push quotas -----
+        // ----- Day tick: compute targets, set trading-post stock -----
 
         private static void OnDayPassed(DayPassedEvent evt)
         {
@@ -115,19 +119,25 @@ namespace EssentialProvisions.Features
             var posts = rm.tradingPostsRO;
             if (posts == null || posts.Count == 0) return;
 
+            bool diag = Config.InventoryDiagnostics.Value;
             int nonFoodMonths = Math.Max(1, Config.SurplusSellingMonths.Value);
             int foodMonths    = Math.Max(1, Config.SurplusSellingFoodMonths.Value);
             float headroom    = 1f + Math.Max(0, Math.Min(50, Config.ConsumableHeadroomPercent.Value)) / 100f;
             bool foodEnabled  = Config.EnableSurplusSellingFood.Value;
 
-            // Pull the rate tracker state out of ConsumableControl. Surplus
-            // Selling shares trackers — no point maintaining duplicates.
+            // Share ConsumableControl's rate trackers — no duplicate telemetry.
             var rates = ConsumableControl.GetCurrentRatesSnapshot();
-            if (rates == null || rates.Count == 0) return;
+            if (rates == null || rates.Count == 0)
+            {
+                if (diag) Plugin.Log.Msg("[SurplusSelling][diag] No consumption rate data yet (is Consumable Control enabled and tracking items?). Nothing to do.");
+                return;
+            }
 
-            // Food aggregate safety net: if total food stock < aggregate target,
-            // skip ALL food this tick. Prevents shipping bread out while berries
-            // are scarce — keeps diet variety intact.
+            int postCount = posts.Count(p => p != null);
+            if (postCount == 0) return;
+
+            // Food aggregate safety net: skip ALL food this tick if total food
+            // stock is below the aggregate target.
             bool foodAggregateOK = false;
             if (foodEnabled)
             {
@@ -141,17 +151,13 @@ namespace EssentialProvisions.Features
                 }
                 int aggregateTarget = (int)Math.Ceiling(totalFoodRate * 30f * foodMonths * headroom);
                 foodAggregateOK = totalFoodStock >= aggregateTarget;
-                if (!foodAggregateOK)
-                {
-                    Plugin.Log.Msg($"[SurplusSelling] Food aggregate {totalFoodStock} below target {aggregateTarget}; skipping food this tick.");
-                }
+                if (diag || !foodAggregateOK)
+                    Plugin.Log.Msg($"[SurplusSelling]{(foodAggregateOK ? "[diag]" : "")} Food aggregate {totalFoodStock} vs target {aggregateTarget} → {(foodAggregateOK ? "shipping food allowed" : "skipping food this tick")}.");
             }
 
-            // Items we previously wrote that we're NOT writing this tick →
-            // need to clear those quotas so they don't stay stuck.
             var stillRelevant = new HashSet<PostItemKey>();
-
             int updates = 0;
+
             foreach (var kv in rates)
             {
                 ItemID itemID = kv.Key;
@@ -165,79 +171,78 @@ namespace EssentialProvisions.Features
                 int months = isFood ? foodMonths : nonFoodMonths;
                 int keepInTown = (int)Math.Ceiling(dailyRate * 30f * months * headroom);
 
-                // Per-type variety floor for food: never ship a food item below
-                // 1 month of its own consumption × headroom, even if aggregate allows.
+                // Per-type variety floor for food: never let storage drop below
+                // 1 month of this item's own consumption, even if months were < that.
                 if (isFood)
                 {
                     int perTypeFloor = (int)Math.Ceiling(dailyRate * 30f * 1f * headroom);
                     if (perTypeFloor > keepInTown) keepInTown = perTypeFloor;
                 }
 
-                int totalTown = GetTownStock(rm, itemID);
-                int excess = totalTown - keepInTown;
-                if (excess <= 0) continue;
+                if (!gm.workBucketManager.itemByItemIDRO.TryGetValue(itemID, out var itemObj)) continue;
 
-                // Target TP holding = current TP stock + excess to draw out.
-                // Vanilla FF allows one trading post per town, so distribution
-                // is trivial; the loop below is defensive in case mods or a
-                // future patch allow more (each post then gets the full target,
-                // not divided, since they each independently pull what they need).
-                if (!gm.workBucketManager.itemByItemIDRO.TryGetValue(itemID, out var itemObjForTp)) continue;
-                int currentTpStock = 0;
-                for (int i = 0; i < posts.Count; i++)
-                {
-                    var p = posts[i];
-                    if (p == null) continue;
-                    try { currentTpStock += (int)p.storage.GetItemCount(itemObjForTp); }
-                    catch { /* tolerate */ }
-                }
-                int targetTpHolding = currentTpStock + excess;
+                int townStock = GetTownStock(rm, itemID);
+                int surplus = townStock - keepInTown;
+
+                // SetTargetStockAmount is ABSOLUTE — the post should hold the
+                // surplus; storage keeps keepInTown. No "+ current post stock".
+                int targetTotal = Math.Max(0, surplus);
+                int perPost = (int)Math.Ceiling((double)targetTotal / postCount);
+
+                int storageStock = townStock - GetPostStock(rm, itemObj);
+
+                if (diag)
+                    Plugin.Log.Msg($"[SurplusSelling][diag] {itemID}: rate {dailyRate:0.00}/day, keep {keepInTown} ({months}mo), town {townStock} (storage {storageStock} + post {townStock - storageStock}), surplus {surplus} → post target {(targetTotal > 0 ? perPost.ToString() : "0 (clear)")}");
+
+                if (targetTotal <= 0)
+                    continue; // not in surplus → handled by the sweep below (cleared)
 
                 for (int i = 0; i < posts.Count; i++)
                 {
                     var post = posts[i];
                     if (post == null) continue;
-                    var qh = post.quotaHandler;
-                    if (qh == null) continue;
+                    // Only manage items the post can actually trade.
+                    if (post.keepInStockDict == null || !post.keepInStockDict.ContainsKey(itemObj.name)) continue;
                     try
                     {
-                        qh.SetMinQuotaForItem(itemID, targetTpHolding);
+                        post.SetTargetStockAmount(itemObj, (uint)perPost);
+                        post.SetKeepInStock(itemObj, true);
                         var key = new PostItemKey(post.GetInstanceID(), itemID);
-                        _writtenQuotas.Add(key);
+                        _managed.Add(key);
                         stillRelevant.Add(key);
                         updates++;
                     }
                     catch (Exception ex)
                     {
-                        Plugin.Log.Warning($"[SurplusSelling] SetMinQuotaForItem({itemID}) failed: {ex.Message}");
+                        Plugin.Log.Warning($"[SurplusSelling] SetTargetStockAmount({itemID}) failed: {ex.Message}");
                     }
                 }
             }
 
-            // Sweep: clear quotas we wrote previously but didn't refresh this
-            // tick (item no longer in surplus, or rate dropped to zero).
+            // Sweep: items we managed last tick but not this one (no longer in
+            // surplus, rate dropped) → reset their post target to 0.
             var toClear = new List<PostItemKey>();
-            foreach (var key in _writtenQuotas)
+            foreach (var key in _managed)
                 if (!stillRelevant.Contains(key)) toClear.Add(key);
             if (toClear.Count > 0)
             {
-                var lookup = BuildTradingPostLookup(rm);
+                var postLookup = BuildPostLookup(rm);
                 foreach (var key in toClear)
                 {
-                    _writtenQuotas.Remove(key);
-                    if (!lookup.TryGetValue(key.PostID, out var qh)) continue;
-                    try { qh.ClearMinQuotaForItem(key.Item); }
-                    catch { /* tolerate */ }
+                    _managed.Remove(key);
+                    if (!postLookup.TryGetValue(key.PostID, out var post)) continue;
+                    if (!gm.workBucketManager.itemByItemIDRO.TryGetValue(key.Item, out var itemObj)) continue;
+                    ResetPostItem(post, itemObj);
                 }
             }
 
             if (updates > 0 || toClear.Count > 0)
-                Plugin.Log.Msg($"[SurplusSelling] Day tick: +{updates} quota update(s), -{toClear.Count} cleared, {_writtenQuotas.Count} active.");
+                Plugin.Log.Msg($"[SurplusSelling] Day tick: {updates} post target(s) set, {toClear.Count} cleared, {_managed.Count} active.");
         }
 
         // ----- Helpers -----
 
-        /// <summary>Sum item count across all granaries + cellars + storehouses + trading posts.</summary>
+        /// <summary>Total town stock: granaries + cellars + storehouses + trading-post traderStorage.</summary>
         private static int GetTownStock(ResourceManager rm, ItemID itemID)
         {
             int total = 0;
@@ -255,37 +260,55 @@ namespace EssentialProvisions.Features
             if (rm.storehousesRO != null)
                 foreach (var s in rm.storehousesRO)
                     if (s?.storage != null) total += (int)s.storage.GetItemCount(itemObj);
-            if (rm.tradingPostsRO != null)
-                foreach (var t in rm.tradingPostsRO)
-                    if (t?.storage != null) total += (int)t.storage.GetItemCount(itemObj);
+            total += GetPostStock(rm, itemObj);
             return total;
         }
 
-        private static Dictionary<int, StorageQuotaHandler> BuildTradingPostLookup(ResourceManager rm)
+        /// <summary>Sum of an item across every trading post's traderStorage (the trade inventory).</summary>
+        private static int GetPostStock(ResourceManager rm, Item itemObj)
         {
-            var lookup = new Dictionary<int, StorageQuotaHandler>();
+            int total = 0;
+            if (rm.tradingPostsRO != null)
+                foreach (var t in rm.tradingPostsRO)
+                    if (t?.traderStorage != null) total += (int)t.traderStorage.GetItemCount(itemObj);
+            return total;
+        }
+
+        private static Dictionary<int, TradingPost> BuildPostLookup(ResourceManager rm)
+        {
+            var lookup = new Dictionary<int, TradingPost>();
             if (rm.tradingPostsRO != null)
                 foreach (var p in rm.tradingPostsRO)
-                    if (p?.quotaHandler != null) lookup[p.GetInstanceID()] = p.quotaHandler;
+                    if (p != null) lookup[p.GetInstanceID()] = p;
             return lookup;
         }
 
-        private static void ClearAllOurQuotas()
+        private static void ResetPostItem(TradingPost post, Item itemObj)
         {
-            if (_writtenQuotas.Count == 0) return;
+            try
+            {
+                post.SetTargetStockAmount(itemObj, 0u);
+                post.SetKeepInStock(itemObj, false);
+            }
+            catch { /* tolerate teardown */ }
+        }
+
+        private static void ClearAllManaged()
+        {
+            if (_managed.Count == 0) return;
             var gm = UnitySingleton<GameManager>.Instance;
             var rm = gm?.resourceManager;
             if (rm != null)
             {
-                var lookup = BuildTradingPostLookup(rm);
-                foreach (var key in _writtenQuotas)
+                var postLookup = BuildPostLookup(rm);
+                foreach (var key in _managed)
                 {
-                    if (!lookup.TryGetValue(key.PostID, out var qh)) continue;
-                    try { qh.ClearMinQuotaForItem(key.Item); }
-                    catch { /* tolerate */ }
+                    if (!postLookup.TryGetValue(key.PostID, out var post)) continue;
+                    if (gm!.workBucketManager.itemByItemIDRO.TryGetValue(key.Item, out var itemObj))
+                        ResetPostItem(post, itemObj);
                 }
             }
-            _writtenQuotas.Clear();
+            _managed.Clear();
         }
     }
 }
