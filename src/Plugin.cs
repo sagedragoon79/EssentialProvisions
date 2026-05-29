@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.0.2", "sagedragoon79")]
+[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.1.0", "sagedragoon79")]
 [assembly: MelonGame("Crate Entertainment", "Farthest Frontier")]
 
 namespace EssentialProvisions
@@ -109,6 +109,7 @@ namespace EssentialProvisions
             Features.FastForward.Reset();
             Features.ShortWalks.Reset();
             Features.BroadShelves.Reset();
+            Features.PlantingAlmanac.Reset();
         }
 
         /// <summary>

@@ -35,6 +35,7 @@ namespace EssentialProvisions
         private const string GroupVillagers   = "Villager Improvements";
         private const string GroupInventory   = "Inventory Management";
         private const string GroupAgriAlerts  = "Agriculture Alerts";
+        private const string GroupAlmanac     = "Planting Almanac";
 
         public static void TryRegisterAll()
         {
@@ -318,6 +319,16 @@ namespace EssentialProvisions
                     label: "Blight Watch",
                     tooltip: "Pin diseased crop fields on the map until the disease is addressed.",
                     order: 20));
+
+            // ============================================================
+            // === Planting Almanac ===
+            // ============================================================
+
+            Reg(GroupAlmanac, Config.EnablePlantingAlmanac,
+                NewMeta(
+                    label: "Planting Almanac",
+                    tooltip: "Adds one-click crop-rotation presets to the crop field window. Ships curated disease-safe rotations; applying one replaces the field's whole schedule via the game's own scheduler. Takes effect the next time you open a crop field window.",
+                    order: 10));
 
             // Note: EfficientLaborOccupations + ConsumableTrackedItems are intentionally
             // NOT registered with KC. Power users edit those keys directly in the cfg;

@@ -20,7 +20,7 @@
     <Platforms>AnyCPU;x64</Platforms>
 
     <!-- The one knob to bump on every release. -->
-    <Version>1.0.2</Version>
+    <Version>1.1.0</Version>
 
     <!-- Derived from <Version> so Explorer's hover tooltip + Properties
          dialog stay in lockstep. Suffixing .0 makes them legal 4-part
@@ -73,6 +73,10 @@
     </Reference>
     <Reference Include="UnityEngine.UIModule">
       <HintPath>$(GameDir)\Farthest Frontier (Mono)\Farthest Frontier_Data\Managed\UnityEngine.UIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(GameDir)\Farthest Frontier (Mono)\Farthest Frontier_Data\Managed\Newtonsoft.Json.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Unity.TextMeshPro">

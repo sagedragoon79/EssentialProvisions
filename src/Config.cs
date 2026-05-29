@@ -98,6 +98,9 @@ namespace EssentialProvisions
         // ----- Broad Shelves (inspired by Sensible Storage; extends storage acceptance) -----
         public static MelonPreferences_Entry<bool> EnableBroadShelves { get; private set; } = null!;
 
+        // ----- Planting Almanac (original EP feature: reusable crop-rotation templates) -----
+        public static MelonPreferences_Entry<bool> EnablePlantingAlmanac { get; private set; } = null!;
+
         // ----- Project Prep (folded from FFAutomation ConstructionReserve) -----
         public static MelonPreferences_Entry<bool> EnableProjectPrep   { get; private set; } = null!;
         public static MelonPreferences_Entry<int>  ProjectPrepLogs     { get; private set; } = null!;
@@ -290,6 +293,11 @@ namespace EssentialProvisions
                 "EnableBroadShelves", false,
                 display_name: "Broad Shelves",
                 description: "Expand storage acceptance + cosmetic rename: Stockyards accept Iron, Granaries accept Hay and Flax, and Granaries are renamed 'Silo' in all UI. Inspired by Sensible Storage (Olleus). Zero performance cost — flag flips at building Awake.");
+
+            EnablePlantingAlmanac = _root.CreateEntry(
+                "EnablePlantingAlmanac", false,
+                display_name: "Planting Almanac",
+                description: "Adds one-click crop-rotation presets to the crop field window. Ships curated disease-safe rotations (built from EP's own rotation validator). Applying a preset replaces the field's whole schedule via the game's own scheduler, so it saves like a hand-entered plan. Default: OFF.");
 
             ConsumableTrackedItems = _root.CreateEntry(
                 "ConsumableTrackedItems",

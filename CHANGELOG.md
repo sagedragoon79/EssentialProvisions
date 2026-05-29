@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.1.0 — 2026-05-29
+
+### Added
+- **Planting Almanac** (new feature, OFF by default) — reusable crop-rotation
+  templates on the crop field window:
+  - A native-styled dropdown of templates: curated disease-safe built-in presets
+    (Disease-Safe Rotation, Soil Rebuild, Fiber & Food) plus your own saved
+    rotations.
+  - **Apply** (styled after the native Paste button) writes the rotation to the
+    open field via the game's own scheduler — captures crops *and* field
+    maintenance periods — then redraws the window live.
+  - **Save** (styled after Copy) captures the open field's rotation, with an
+    optional typed name (auto-names from the crops otherwise), and writes a
+    shareable JSON to `UserData/EP_CropTemplates/`. The library is global to the
+    player (not per-save), so saved rotations show up in every game and can be
+    shared by copying the JSON files.
+  - **Delete** (styled after Clear) removes the selected saved template;
+    built-in presets are protected.
+  - Soil Wisdom's rotation-status line is relocated beside the Planting Almanac
+    title when both features are enabled.
+  - Hotkey/camera suppression while typing a name (via `HotkeyManager`) so the
+    crop window stays open and keystrokes don't bleed into the game.
+
 ## 1.0.2 — 2026-05-28
 
 ### Fixed

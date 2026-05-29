@@ -250,7 +250,7 @@ namespace EssentialProvisions.Common
         /// "TurnipField" → "Turnip". Strips the "Field" suffix that FF uses
         /// internally so warnings read naturally.
         /// </summary>
-        private static string Pretty(string recordName)
+        internal static string Pretty(string recordName)
         {
             if (string.IsNullOrEmpty(recordName)) return recordName;
             const string suffix = "Field";

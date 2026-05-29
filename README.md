@@ -40,6 +40,10 @@ If you've already got one of the source mods installed, EP detects it at startup
 - **Soil Wisdom** — Crop info window gains a rotation summary line plus hover tooltip detailing disease and seasonal risks. Catches all five vanilla disease groups (Turnip/Cabbage, legume rotations, grain rotations, etc.) and flags frost-vulnerable spring plantings and heat-vulnerable summer crops.
 - **Blight Watch** — Pin diseased crop fields on the map until the disease is addressed. The pin stays visible until the field is clean, instead of fading after the initial event.
 
+### Planting Almanac
+
+- **Planting Almanac** — Reusable crop-rotation templates right on the crop field window. Pick from curated disease-safe presets (built and verified against EP's own rotation rules) or your own saved rotations, and **Apply** to set the field's whole schedule — crops *and* field-maintenance periods — in one click. **Save** captures the open field's rotation (optionally name it) as a shareable JSON in `UserData/EP_CropTemplates/`; the library is global to the player, so your rotations follow you to every game and can be shared by copying the files. **Delete** removes your own templates (presets are protected). An original EP feature, not a fold.
+
 ## Installation
 
 1. Install [MelonLoader](https://melonwiki.xyz/) (Mono build) for Farthest Frontier.
