@@ -217,6 +217,17 @@ namespace EssentialProvisions
                     min: 20, max: 80,
                     visibleWhen: () => Config.EnableIdleHands.Value, order: 71));
 
+            Reg(GroupVillagers, Config.EnableLearnedHands,
+                NewMeta(
+                    label: "Learned Hands",
+                    tooltip: "Educated villagers work faster at every job. Closes a vanilla gap — the official guide claims this but the assembly doesn't actually implement it. Default +10% per education level. Takes effect immediately.",
+                    order: 80));
+            Reg(GroupVillagers, Config.LearnedHandsPerLevelBonus,
+                NewMeta(label: "    Bonus per Education Level",
+                    tooltip: "Work-speed bonus added per education level (0.10 = +10%/level).",
+                    min: 0f, max: 0.5f,
+                    visibleWhen: () => Config.EnableLearnedHands.Value, order: 81));
+
             // ============================================================
             // === Inventory Management ===
             // ============================================================

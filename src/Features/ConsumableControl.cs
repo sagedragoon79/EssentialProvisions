@@ -98,6 +98,18 @@ namespace EssentialProvisions.Features
         private static bool _wasEnabled;
         private static string _lastParsedItemsRaw = "";
 
+        // ----- Temporary diagnostic state (1.1.0+) — surface CC's silence ----
+        // One-shot path traces (bitmask) + first-time ItemConsumedEvent per item.
+        private static int _traceMask;
+        private static readonly HashSet<ItemID> _firstConsumed = new HashSet<ItemID>();
+
+        private static void TraceOnce(int bit, string msg)
+        {
+            if ((_traceMask & bit) != 0) return;
+            _traceMask |= bit;
+            try { Plugin.Log.Msg($"[ConsumableControl][trace] {msg}"); } catch { }
+        }
+
         // Regular cadence is monthly, but we also do one catch-up apply on the
         // first day after enabling that has consumption data — otherwise the
         // reserve floor wouldn't exist for up to a month after you turn the
@@ -113,6 +125,8 @@ namespace EssentialProvisions.Features
             _wasEnabled = false;
             _lastParsedItemsRaw = "";
             _initialApplyDone = false;
+            _traceMask = 0;
+            _firstConsumed.Clear();
         }
 
         /// <summary>
@@ -136,6 +150,8 @@ namespace EssentialProvisions.Features
 
         public static void OnUpdate()
         {
+            TraceOnce(1, "OnUpdate alive (called at least once)");
+
             bool enabled = Config.EnableConsumableControl.Value;
 
             if (!enabled && _wasEnabled)
@@ -144,23 +160,29 @@ namespace EssentialProvisions.Features
                 UnsubscribeIfSubscribed();
             }
             _wasEnabled = enabled;
-            if (!enabled) return;
+            if (!enabled) { TraceOnce(2, "early-return: EnableConsumableControl is false"); return; }
+            TraceOnce(4, "EnableConsumableControl is true");
 
-            if (!GameManager.gameReadyToPlay) return;
+            if (!GameManager.gameReadyToPlay) { TraceOnce(8, "early-return: gameReadyToPlay false (still waiting)"); return; }
+            TraceOnce(16, "gameReadyToPlay reached");
             var gm = UnitySingleton<GameManager>.Instance;
-            if (gm == null) return;
+            if (gm == null) { TraceOnce(32, "early-return: GameManager.Instance is null"); return; }
             var em = gm.eventManager;
-            if (em == null) return;
+            if (em == null) { TraceOnce(64, "early-return: gameManager.eventManager is null"); return; }
+            TraceOnce(128, "managers available");
 
             var raw = Config.ConsumableTrackedItems.Value;
             if (raw != _lastParsedItemsRaw)
             {
-                RebuildTrackers(raw);
-                _lastParsedItemsRaw = raw;
+                TraceOnce(256, $"RebuildTrackers invoked (raw {(raw?.Length ?? 0)} chars)");
+                RebuildTrackers(raw ?? "");
+                _lastParsedItemsRaw = raw ?? "";
+                TraceOnce(512, $"trackers built: {_trackers.Count}");
             }
 
             if (!_subscribed)
             {
+                TraceOnce(1024, "about to subscribe + log Tracking summary");
                 em.AddListener<ItemConsumedEvent>(OnItemConsumed);
                 em.AddListener<DayPassedEvent>(OnDayPassed);
                 em.AddListener<MonthPassedEvent>(OnMonthPassed);
@@ -209,7 +231,13 @@ namespace EssentialProvisions.Features
         private static void OnItemConsumed(ItemConsumedEvent evt)
         {
             if (evt?.item == null) return;
-            if (_trackers.TryGetValue(evt.item.itemID, out var tracker))
+            var id = evt.item.itemID;
+            if (_firstConsumed.Add(id))
+            {
+                bool tracked = _trackers.ContainsKey(id);
+                try { Plugin.Log.Msg($"[ConsumableControl][trace] first ItemConsumedEvent: {id} (amount {evt.amountConsumed}, tracked={tracked})"); } catch { }
+            }
+            if (_trackers.TryGetValue(id, out var tracker))
                 tracker.TodayTotal += evt.amountConsumed;
         }
 

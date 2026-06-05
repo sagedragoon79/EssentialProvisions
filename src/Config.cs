@@ -101,6 +101,11 @@ namespace EssentialProvisions
         // ----- Planting Almanac (original EP feature: reusable crop-rotation templates) -----
         public static MelonPreferences_Entry<bool> EnablePlantingAlmanac { get; private set; } = null!;
 
+        // ----- Learned Hands (original EP feature: educated villagers work faster) -----
+        public static MelonPreferences_Entry<bool>  EnableLearnedHands        { get; private set; } = null!;
+        public static MelonPreferences_Entry<float> LearnedHandsPerLevelBonus { get; private set; } = null!;
+        public static MelonPreferences_Entry<bool>  LearnedHandsVerbose       { get; private set; } = null!;
+
         // ----- Project Prep (folded from FFAutomation ConstructionReserve) -----
         public static MelonPreferences_Entry<bool> EnableProjectPrep   { get; private set; } = null!;
         public static MelonPreferences_Entry<int>  ProjectPrepLogs     { get; private set; } = null!;
@@ -287,6 +292,22 @@ namespace EssentialProvisions
                 "EnableShortWalks", false,
                 display_name: "Short Walks",
                 description: "Once a month, re-optimize villagers' home assignments to live closer to their workplaces (re-housing, not re-jobbing). Uses FF's built-in Hungarian algorithm — pairs naturally with the Long Travels alert. Soldiers, Guards, and TransitionToSoldier are excluded so their garrison linkage isn't disturbed. Villagers whose workplace IS their residence (live-at-work occupations) are also automatically skipped.");
+
+            // ----- Learned Hands -----
+            EnableLearnedHands = _root.CreateEntry(
+                "EnableLearnedHands", false,
+                display_name: "Learned Hands",
+                description: "Educated villagers work faster at every job — closes a vanilla gap (the official guide claims this but the assembly never implements it). Default +10% per education level (today's basic education = +10%). Multiplicative bonus stacked on top of vanilla's happiness/tool/tech terms. Toggle is live; takes effect immediately.");
+
+            LearnedHandsPerLevelBonus = _root.CreateEntry(
+                "LearnedHandsPerLevelBonus", 0.10f,
+                display_name: "    Bonus per Education Level",
+                description: "Work-speed bonus added per education level. 0.10 = +10% per level. Today only level 0 (none) and level 1 (basic) exist, so this is effectively +10% for educated villagers — but if Crate ever ships higher tiers the formula scales automatically.");
+
+            LearnedHandsVerbose = _root.CreateEntry(
+                "LearnedHandsVerbose", false,
+                display_name: "Learned Hands: Verbose Logging",
+                description: "When true, logs one line per unique villager the first time their bonus is applied. cfg-only; not surfaced in the KC panel. Default is a single one-shot 'first application' line that fires regardless, so you can confirm the patch is live without spam.");
 
             // ----- Broad Shelves -----
             EnableBroadShelves = _root.CreateEntry(

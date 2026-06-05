@@ -110,6 +110,7 @@ namespace EssentialProvisions
             Features.ShortWalks.Reset();
             Features.BroadShelves.Reset();
             Features.PlantingAlmanac.Reset();
+            Features.LearnedHands.Reset();
         }
 
         /// <summary>
