@@ -27,15 +27,13 @@ namespace EssentialProvisions.Features
 {
     internal static class LearnedHands
     {
-        // One-shot trace flags so we can confirm the patch is wired up without
-        // spamming the log every frame. Cleared on Reset.
-        private static bool _firstCallLogged;          // ANY call (educated or not) — proves the patch is bound
-        private static bool _firstApplicationLogged;   // First call where the bonus actually applied
+        // One-shot flag: log the first time the bonus actually applies, so the
+        // feature's effect is observable without per-frame spam. Cleared on Reset.
+        private static bool _firstApplicationLogged;
         private static readonly HashSet<int> _verboseSeen = new HashSet<int>();
 
         public static void Reset()
         {
-            _firstCallLogged = false;
             _firstApplicationLogged = false;
             _verboseSeen.Clear();
         }
@@ -46,16 +44,6 @@ namespace EssentialProvisions.Features
         {
             private static void Postfix(Villager villager, ref float __result)
             {
-                // Confirms the patch is bound & being called — fires regardless of cfg/education.
-                if (!_firstCallLogged)
-                {
-                    _firstCallLogged = true;
-                    int dbgLevel = -1;
-                    try { dbgLevel = villager?.education?.currentLevel?.level ?? -1; } catch { }
-                    try { Plugin.Log.Msg($"[LearnedHands][trace] First call to postfix — villager level {dbgLevel}, base mult {__result:F3}, cfgEnabled={Config.EnableLearnedHands.Value}."); }
-                    catch { }
-                }
-
                 if (!Config.EnableLearnedHands.Value) return;
                 if (villager == null) return;
 

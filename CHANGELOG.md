@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.0 — 2026-06-06
+
+### Added
+- **Learned Hands** (new feature, OFF by default) — educated villagers now work
+  faster. FF's official guide says educated workers are more efficient, but the
+  game's assembly never actually implements a work-rate term that reads
+  education — it only gates a few jobs (Healer, School-teacher, Apothecary). This
+  closes that gap: each educated villager gets a multiplicative work-rate bonus
+  (default **+10% per education level**) applied to *every* job, from resource
+  collection to manufacturing. Tunable: per-level bonus 0–50% (`LearnedHandsPerLevelBonus`),
+  plus a cfg-only verbose log toggle (`LearnedHandsVerbose`). The bonus is
+  per-worker — a building's output scales with its workers' education, and the
+  effect is retroactive to already-educated villagers.
+
 ## 1.1.0 — 2026-05-29
 
 ### Added

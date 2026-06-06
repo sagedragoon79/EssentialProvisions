@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.1.0", "sagedragoon79")]
+[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.2.0", "sagedragoon79")]
 [assembly: MelonGame("Crate Entertainment", "Farthest Frontier")]
 
 namespace EssentialProvisions
@@ -47,7 +47,7 @@ namespace EssentialProvisions
 
             // MelonLoader's HarmonyInit() ran before this method and already
             // called HarmonyInstance.PatchAll(); calling again would double-patch.
-            LoggerInstance.Msg("Essential Provisions 1.0.1 initialized");
+            LoggerInstance.Msg($"{Info.Name} {Info.Version} initialized");
         }
 
         private void DetectForeignMods()
