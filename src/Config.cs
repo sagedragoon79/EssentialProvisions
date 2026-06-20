@@ -79,6 +79,7 @@ namespace EssentialProvisions
         public static MelonPreferences_Entry<int>    SurplusSellingMonths        { get; private set; } = null!;
         public static MelonPreferences_Entry<bool>   EnableSurplusSellingFood    { get; private set; } = null!;
         public static MelonPreferences_Entry<int>    SurplusSellingFoodMonths    { get; private set; } = null!;
+        public static MelonPreferences_Entry<int>    SurplusSellingPollDays      { get; private set; } = null!;
 
         // Shared diagnostic switch for the inventory features (Consumable Control +
         // Surplus Selling). cfg-only; when true, both log per-item detail so you can
@@ -105,6 +106,11 @@ namespace EssentialProvisions
         public static MelonPreferences_Entry<bool>  EnableLearnedHands        { get; private set; } = null!;
         public static MelonPreferences_Entry<float> LearnedHandsPerLevelBonus { get; private set; } = null!;
         public static MelonPreferences_Entry<bool>  LearnedHandsVerbose       { get; private set; } = null!;
+
+        // ----- Workplace Mastery (original EP feature: villagers work faster the longer they hold a job) -----
+        public static MelonPreferences_Entry<bool> EnableWorkplaceMastery     { get; private set; } = null!;
+        public static MelonPreferences_Entry<int>  WorkplaceMasteryPerYearPct { get; private set; } = null!;
+        public static MelonPreferences_Entry<int>  WorkplaceMasteryYearsCap   { get; private set; } = null!;
 
         // ----- Project Prep (folded from FFAutomation ConstructionReserve) -----
         public static MelonPreferences_Entry<bool> EnableProjectPrep   { get; private set; } = null!;
@@ -265,6 +271,11 @@ namespace EssentialProvisions
                 display_name: "Surplus Selling: Keep-in-Town Months (food)",
                 description: "How many months of stock to keep in town storages for each food item. Default 10 matches FF's immigration threshold — recommended floor.");
 
+            SurplusSellingPollDays = _root.CreateEntry(
+                "SurplusSellingPollDays", 5,
+                display_name: "Surplus Selling: Recalculate Every N Days",
+                description: "How often (in in-game days) to recompute trading-post stock targets. The 30-day rolling consumption average barely moves day-to-day, so recomputing daily is wasteful; every 5 days is plenty responsive. Lower = more responsive to sudden stock swings; higher = lighter on large maps. Range 1–30. Runs once immediately when enabled, then on this cadence.");
+
             InventoryDiagnostics = _root.CreateEntry(
                 "InventoryDiagnostics", false,
                 display_name: "Inventory Features: Diagnostic Logging",
@@ -308,6 +319,22 @@ namespace EssentialProvisions
                 "LearnedHandsVerbose", false,
                 display_name: "Learned Hands: Verbose Logging",
                 description: "When true, logs one line per unique villager the first time their bonus is applied. cfg-only; not surfaced in the KC panel. Default is a single one-shot 'first application' line that fires regardless, so you can confirm the patch is live without spam.");
+
+            // ----- Workplace Mastery -----
+            EnableWorkplaceMastery = _root.CreateEntry(
+                "EnableWorkplaceMastery", false,
+                display_name: "Workplace Mastery",
+                description: "Villagers get a small, growing work-rate bonus the longer they hold the same job. Default +2% per in-game year of tenure, capped at +10% (5 years). Multiplicative; stacks on Learned Hands and the vanilla happiness/tool/tech terms. Tenure is tracked per occupation and persists per-save. Existing villagers start at 0 — Farthest Frontier stores no job-start date to seed from, so tenure accrues from when you enable it. Toggle is live.");
+
+            WorkplaceMasteryPerYearPct = _root.CreateEntry(
+                "WorkplaceMasteryPerYearPct", 2,
+                display_name: "    Bonus per Year of Tenure (%)",
+                description: "Work-speed bonus added per in-game year (360 days) a villager has held their current job. Range 1-3.");
+
+            WorkplaceMasteryYearsCap = _root.CreateEntry(
+                "WorkplaceMasteryYearsCap", 5,
+                display_name: "    Tenure Cap (years)",
+                description: "Tenure stops earning bonus past this many years. At the default +2%/yr, a 5-year cap = +10% max. Range 0-25. Set 0 to suspend the bonus while still tracking tenure for the Mastery column.");
 
             // ----- Broad Shelves -----
             EnableBroadShelves = _root.CreateEntry(

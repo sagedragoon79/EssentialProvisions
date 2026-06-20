@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.2.0", "sagedragoon79")]
+[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.3.0", "sagedragoon79")]
 [assembly: MelonGame("Crate Entertainment", "Farthest Frontier")]
 
 namespace EssentialProvisions
@@ -40,6 +40,7 @@ namespace EssentialProvisions
 
             // Features with one-time post-Config setup hooks.
             Features.ProjectPrep.Initialize();
+            Features.WorkplaceMastery.Initialize();
 
             // Soft-dep registration with Keep Clarity's settings panel. No-ops
             // cleanly when KC isn't installed.
@@ -111,6 +112,7 @@ namespace EssentialProvisions
             Features.BroadShelves.Reset();
             Features.PlantingAlmanac.Reset();
             Features.LearnedHands.Reset();
+            Features.WorkplaceMastery.Reset();
         }
 
         /// <summary>
@@ -131,6 +133,7 @@ namespace EssentialProvisions
             Features.SurplusSelling.OnUpdate();
             Features.FastForward.OnUpdate();
             Features.ShortWalks.OnUpdate();
+            Features.WorkplaceMastery.OnUpdate();
         }
     }
 }

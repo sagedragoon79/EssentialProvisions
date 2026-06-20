@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.3.0 — 2026-06-19
+
+### Added
+- **Workplace Mastery** (new feature, OFF by default) — villagers work a little
+  faster the longer they hold the same job. Each villager earns a multiplicative
+  work-rate bonus of **+2% per in-game year of tenure, capped at +10%** by default
+  (tunable: per-year bonus 1–3% via `WorkplaceMasteryPerYearPct`, cap 0–25 years
+  via `WorkplaceMasteryYearsCap`). It **stacks on Learned Hands** — a worker's
+  output is `base × (1 + education) × (1 + tenure)`. Tenure is tracked per
+  occupation (switching jobs banks the old job's tenure and starts a fresh clock
+  on the new one) and **persists per save** in
+  `UserData/EP_VillagerMastery/<save>.json`. Hover a villager's profession icon in
+  the worker-assignment picker to see their tenure breakdown. Existing villagers
+  start at 0 — Farthest Frontier stores no job-start date to seed from, so tenure
+  accrues from when you enable the feature.
+- **Keep Clarity villager-window readout** — EP exposes a small public interop
+  (`WorkInfoApi.GetVillagerWorkSummary`) that Keep Clarity reads to show a
+  villager's combined EP work bonuses (e.g. `+10% edu · +8% mastery`) in the
+  villager info window. Soft-dep; does nothing without Keep Clarity installed.
+
+### Changed
+- **Surplus Selling** — now recomputes trading-post stock targets **every N days**
+  (default 5, range 1–30, `SurplusSellingPollDays`) instead of every single day.
+  The 30-day rolling consumption average barely moves day-to-day, so this is much
+  lighter on large maps with no loss in responsiveness; the first stocking pass
+  still runs immediately once a trading post and consumption data exist. It also
+  now clears its managed trading-post targets when consumption data goes away
+  (e.g. you clear the tracked-items list), and warns once if it's enabled without
+  Consumable Control (which supplies the rate data it needs).
+
+### Fixed
+- **Planting Almanac** — applying a template now clears the crop field's "empty
+  season" warning marker immediately. Previously the marker lingered until you
+  manually deleted and re-added a crop, because the schedule-add API doesn't
+  refresh that flag (the game's own paste path does it in the caller — now so do
+  we).
+
 ## 1.2.0 — 2026-06-06
 
 ### Added

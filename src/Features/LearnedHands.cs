@@ -19,6 +19,7 @@
 // framework: today level 1 = +10%; if Crate ships higher tiers the formula
 // extends with no code change. Stateless. No save/load state. Live toggle.
 
+using System;
 using System.Collections.Generic;
 using HarmonyLib;
 using MelonLoader;
@@ -30,11 +31,13 @@ namespace EssentialProvisions.Features
         // One-shot flag: log the first time the bonus actually applies, so the
         // feature's effect is observable without per-frame spam. Cleared on Reset.
         private static bool _firstApplicationLogged;
+        private static bool _errorLogged;
         private static readonly HashSet<int> _verboseSeen = new HashSet<int>();
 
         public static void Reset()
         {
             _firstApplicationLogged = false;
+            _errorLogged = false;
             _verboseSeen.Clear();
         }
 
@@ -45,30 +48,42 @@ namespace EssentialProvisions.Features
             private static void Postfix(Villager villager, ref float __result)
             {
                 if (!Config.EnableLearnedHands.Value) return;
-                if (villager == null) return;
-
-                var edu = villager.education;
-                if (edu == null || edu.currentLevel == null) return;
-                int level = edu.currentLevel.level;
-                if (level <= 0) return;
-
-                float perLevel = Config.LearnedHandsPerLevelBonus.Value;
-                float before = __result;
-                __result *= 1f + level * perLevel;
-
-                // First call where the bonus actually fires — confirms end-to-end.
-                if (!_firstApplicationLogged)
+                // High-frequency work path — never throw into game code (EP rule).
+                try
                 {
-                    _firstApplicationLogged = true;
-                    Plugin.Log.Msg($"[LearnedHands] First application: education level {level}, " +
-                        $"base mult {before:F3} → {__result:F3} (+{(__result / before - 1f) * 100f:F1}%) " +
-                        $"with perLevel={perLevel:F2}.");
+                    if (villager == null) return;
+
+                    var edu = villager.education;
+                    if (edu == null || edu.currentLevel == null) return;
+                    int level = edu.currentLevel.level;
+                    if (level <= 0) return;
+
+                    float perLevel = Config.LearnedHandsPerLevelBonus.Value;
+                    float before = __result;
+                    __result *= 1f + level * perLevel;
+
+                    // First call where the bonus actually fires — confirms end-to-end.
+                    if (!_firstApplicationLogged)
+                    {
+                        _firstApplicationLogged = true;
+                        Plugin.Log.Msg($"[LearnedHands] First application: education level {level}, " +
+                            $"base mult {before:F3} → {__result:F3} (+{(__result / before - 1f) * 100f:F1}%) " +
+                            $"with perLevel={perLevel:F2}.");
+                    }
+
+                    // Verbose: one log per unique villager (still bounded).
+                    if (Config.LearnedHandsVerbose.Value && _verboseSeen.Add(villager.GetInstanceID()))
+                    {
+                        Plugin.Log.Msg($"[LearnedHands][diag] {SafeName(villager)} (level {level}): {before:F3} → {__result:F3}");
+                    }
                 }
-
-                // Verbose: one log per unique villager (still bounded).
-                if (Config.LearnedHandsVerbose.Value && _verboseSeen.Add(villager.GetInstanceID()))
+                catch (Exception ex)
                 {
-                    Plugin.Log.Msg($"[LearnedHands][diag] {SafeName(villager)} (level {level}): {before:F3} → {__result:F3}");
+                    if (!_errorLogged)
+                    {
+                        _errorLogged = true;
+                        Plugin.Log.Warning($"[LearnedHands] WorkRatePatch error (suppressed further): {ex.Message}");
+                    }
                 }
             }
         }

@@ -342,7 +342,20 @@ namespace EssentialProvisions.Common
                 }
             }
 
-            // 3) Post-apply validation (reuse Soil Wisdom's validator for consistency).
+            // 3) Refresh the field's "empty season" widget marker. The scheduler
+            // updates field.widgetBlackboard.hasEmptyCropSeason inside Clear()/
+            // Init()/Load(), but NOT in AttemptToAddCropToSchedule — there the
+            // CALLER is responsible. Every vanilla add path recomputes it right
+            // after the scheduler call (e.g. UICropInfoWindow.AddDragItem and
+            // OnClonerPasteEvent both do exactly this line). We clear+re-add, so
+            // without this the marker stays stuck "on" — the field reads as
+            // unconfigured until a manual edit re-triggers the recompute. The
+            // blackboard setter fires its changed-event only on a real value
+            // change, so this is the precise nudge the marker widget needs.
+            try { field.widgetBlackboard.hasEmptyCropSeason = scheduler.hasEmptyCropSeason; }
+            catch (Exception ex) { Plugin.Log.Warning($"[PlantingAlmanac] hasEmptyCropSeason refresh failed: {ex.Message}"); }
+
+            // 4) Post-apply validation (reuse Soil Wisdom's validator for consistency).
             try { r.Warnings = CropRotationLogic.Validate(field).Count; }
             catch { /* non-fatal */ }
 

@@ -77,7 +77,8 @@ namespace EssentialProvisions
                 ModDisplayName,
                 "Curated opt-in QoL bundle. Information overlays, alerts, pace-of-play helpers. Every feature is OFF by default. " +
                 "Folded with credit from the original community modders — see README for the full provenance table.",
-                /*version*/ "0.2.0",
+                /*version — pulled live from MelonInfo so it never drifts from the DLL*/
+                (Plugin.Instance?.Info?.Version ?? "1.3.0"),
                 /*iconResourcePath*/ null,
                 /*accentRgb — warm amber (provisions / supply theme)*/ new[] { 0.85f, 0.65f, 0.30f, 1f },
                 /*order*/ 20
@@ -228,6 +229,22 @@ namespace EssentialProvisions
                     min: 0f, max: 0.5f,
                     visibleWhen: () => Config.EnableLearnedHands.Value, order: 81));
 
+            Reg(GroupVillagers, Config.EnableWorkplaceMastery,
+                NewMeta(
+                    label: "Workplace Mastery",
+                    tooltip: "Villagers work faster the longer they hold the same job. Default +2% per year of tenure, capped at +10%. Stacks on Learned Hands. Tenure persists per-save; existing villagers start fresh (no job-start date exists in the save to seed from). Adds a Mastery readout to the villager picker.",
+                    order: 90));
+            Reg(GroupVillagers, Config.WorkplaceMasteryPerYearPct,
+                NewMeta(label: "    Bonus per Year of Tenure (%)",
+                    tooltip: "Work-speed bonus per in-game year (360 days) in the current job.",
+                    min: 1, max: 3,
+                    visibleWhen: () => Config.EnableWorkplaceMastery.Value, order: 91));
+            Reg(GroupVillagers, Config.WorkplaceMasteryYearsCap,
+                NewMeta(label: "    Tenure Cap (years)",
+                    tooltip: "Tenure stops earning bonus past this many years. At +2%/yr, 5 years = +10% max. 0 suspends the bonus (tracking continues).",
+                    min: 0, max: 25,
+                    visibleWhen: () => Config.EnableWorkplaceMastery.Value, order: 92));
+
             // ============================================================
             // === Inventory Management ===
             // ============================================================
@@ -241,7 +258,7 @@ namespace EssentialProvisions
             Reg(GroupInventory, Config.EnableSurplusSelling,
                 NewMeta(
                     label: "Surplus Selling",
-                    tooltip: "Auto-shunt excess stock to your trading post based on observed daily consumption × months. Non-food only by default — food has a separate sub-toggle with diet-variety safeguards.",
+                    tooltip: "Auto-shunt excess stock to your trading post based on observed daily consumption × months. Non-food only by default — food has a separate sub-toggle with diet-variety safeguards. Requires Consumable Control enabled too: it gathers the daily-rate data Surplus Selling uses to size shipments.",
                     order: 20));
             Reg(GroupInventory, Config.SurplusSellingMonths,
                 NewMeta(label: "    Keep-in-Town Months (non-food)",
@@ -257,6 +274,11 @@ namespace EssentialProvisions
                     tooltip: "Months of food stock to keep in town. Default 10 matches FF's immigration threshold.",
                     min: 1, max: 24,
                     visibleWhen: () => Config.EnableSurplusSelling.Value && Config.EnableSurplusSellingFood.Value, order: 23));
+            Reg(GroupInventory, Config.SurplusSellingPollDays,
+                NewMeta(label: "    Recalculate Every N Days",
+                    tooltip: "How often (in-game days) to recompute trading-post stock targets. The 30-day rolling average barely moves day-to-day, so daily is wasteful; 5 is plenty responsive. Lower = snappier, higher = lighter on big maps.",
+                    min: 1, max: 30,
+                    visibleWhen: () => Config.EnableSurplusSelling.Value, order: 24));
 
             Reg(GroupInventory, Config.EnableConsumableControl,
                 NewMeta(

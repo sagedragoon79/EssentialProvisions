@@ -66,11 +66,25 @@ namespace EssentialProvisions.Features
         private static bool _subscribed;
         private static bool _wasEnabled;
 
+        // Poll throttle: DayPassedEvent fires daily, but the 30-day rolling
+        // average barely moves day-to-day, so we only recompute every N days
+        // (Config.SurplusSellingPollDays). _ranOnce makes the first tick after
+        // enabling run immediately, then the cadence kicks in.
+        private static int _dayCounter;
+        private static bool _ranOnce;
+
+        // One-shot guard for the "enable Consumable Control too" warning, so it's
+        // surfaced once per session instead of every day-tick.
+        private static bool _warnedNoData;
+
         public static void Reset()
         {
             UnsubscribeIfSubscribed();
             ClearAllManaged();
             _wasEnabled = false;
+            _dayCounter = 0;
+            _ranOnce = false;
+            _warnedNoData = false;
         }
 
         public static void OnUpdate()
@@ -94,7 +108,9 @@ namespace EssentialProvisions.Features
             {
                 em.AddListener<DayPassedEvent>(OnDayPassed);
                 _subscribed = true;
-                Plugin.Log.Msg("[SurplusSelling] Active. Excess above keep-in-town target will be set as trading-post stock on each day-tick.");
+                _dayCounter = 0;
+                _ranOnce = false;
+                Plugin.Log.Msg($"[SurplusSelling] Active. Excess above keep-in-town target is set as trading-post stock; recomputed every {Math.Max(1, Config.SurplusSellingPollDays.Value)} day(s).");
             }
         }
 
@@ -112,6 +128,12 @@ namespace EssentialProvisions.Features
         private static void OnDayPassed(DayPassedEvent evt)
         {
             if (!Config.EnableSurplusSelling.Value) return;
+
+            // Don't let the poll throttle advance until there's actually work to do
+            // — a trading post to stock AND consumption-rate data to size it. If we
+            // counted ticks (or spent the "first run immediately" budget) while no
+            // post exists, building one later would wait up to a full interval
+            // before the first stocking pass. Gate on those first, throttle second.
             var gm = UnitySingleton<GameManager>.Instance;
             if (gm == null) return;
             var rm = gm.resourceManager;
@@ -120,18 +142,46 @@ namespace EssentialProvisions.Features
             if (posts == null || posts.Count == 0) return;
 
             bool diag = Config.InventoryDiagnostics.Value;
-            int nonFoodMonths = Math.Max(1, Config.SurplusSellingMonths.Value);
-            int foodMonths    = Math.Max(1, Config.SurplusSellingFoodMonths.Value);
-            float headroom    = 1f + Math.Max(0, Math.Min(50, Config.ConsumableHeadroomPercent.Value)) / 100f;
-            bool foodEnabled  = Config.EnableSurplusSellingFood.Value;
 
             // Share ConsumableControl's rate trackers — no duplicate telemetry.
             var rates = ConsumableControl.GetCurrentRatesSnapshot();
             if (rates == null || rates.Count == 0)
             {
-                if (diag) Plugin.Log.Msg("[SurplusSelling][diag] No consumption rate data yet (is Consumable Control enabled and tracking items?). Nothing to do.");
+                // No rate data → reset any posts we were managing, so stale target-stock +
+                // keep-in-stock settings don't keep generating haul-to-post requests
+                // forever (e.g. the player cleared the tracked-items list while a post was
+                // being managed). No-op once cleared.
+                if (_managed.Count > 0) ClearAllManaged();
+
+                // Surplus Selling can't size shipments without Consumable Control's
+                // consumption telemetry. If CC is off, say so once (not diag-gated) so the
+                // dependency isn't silent on the most likely first-time use.
+                if (!Config.EnableConsumableControl.Value && !_warnedNoData)
+                {
+                    _warnedNoData = true;
+                    Plugin.Log.Warning("[SurplusSelling] No consumption data — enable Consumable Control too; it gathers the daily-rate data Surplus Selling needs to size shipments.");
+                }
+                else if (diag)
+                {
+                    Plugin.Log.Msg("[SurplusSelling][diag] No consumption rate data yet (is Consumable Control tracking items?). Nothing to do.");
+                }
                 return;
             }
+
+            // Throttle: run on the first qualifying tick after enabling, then every
+            // N days. The expensive work (per-item town-stock walk + post writes)
+            // is below this gate; the cheap presence/rate checks above are not, so
+            // a freshly-built post gets its first stocking pass on the next tick.
+            int interval = Math.Max(1, Config.SurplusSellingPollDays.Value);
+            _dayCounter++;
+            if (_ranOnce && _dayCounter < interval) return;
+            _ranOnce = true;
+            _dayCounter = 0;
+
+            int nonFoodMonths = Math.Max(1, Config.SurplusSellingMonths.Value);
+            int foodMonths    = Math.Max(1, Config.SurplusSellingFoodMonths.Value);
+            float headroom    = 1f + Math.Max(0, Math.Min(50, Config.ConsumableHeadroomPercent.Value)) / 100f;
+            bool foodEnabled  = Config.EnableSurplusSellingFood.Value;
 
             int postCount = posts.Count(p => p != null);
             if (postCount == 0) return;

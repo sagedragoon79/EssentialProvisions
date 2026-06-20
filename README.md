@@ -2,7 +2,7 @@
 
 *A curated, opt-in quality-of-life bundle for Farthest Frontier.*
 
-Seventeen features across four categories, every one OFF by default. Open the in-game settings panel, pick what you want, ignore the rest.
+Eighteen features across four categories, every one OFF by default. Open the in-game settings panel, pick what you want, ignore the rest.
 
 ## Why a bundle?
 
@@ -26,6 +26,7 @@ If you've already got one of the source mods installed, EP detects it at startup
 - **Labor Shortage** — Top-bar badge when your laborer and builder counts fall below the recommended count for your settlement size. Surfaces the common late-game pitfall of "everyone assigned to professions, no one hauling logs."
 - **Efficient Labor** — Idle villagers in crafting and outdoor roles temporarily help out as laborers when their own job has nothing to do. Sawyer with no logs goes hauling. Farmer in winter goes hauling. Their actual job stays the priority — they snap back the moment real work appears at their workplace.
 - **Learned Hands** — Educated villagers work faster at every job. FF's own guide says educated workers are more efficient, but the game never actually implements it — education only gates a handful of jobs. This adds the missing work-rate bonus: each educated villager gets a multiplicative speed-up (default +10% per education level) on everything they do, from chopping wood to baking bread. Per-worker, so a building's output scales with its workers' education, and it applies retroactively to villagers already educated. Per-level bonus is tunable.
+- **Workplace Mastery** — Villagers get faster the longer they stay in a job. Each worker earns a small, growing work-rate bonus per in-game year of tenure (default +2%/year, capped at +10%), and it stacks on top of Learned Hands. Tenure is tracked per occupation — switching jobs banks the old job's experience and starts a fresh clock — and persists across saves. Hover a villager's profession icon in the worker-assignment picker to see their tenure. Both the per-year bonus and the cap are tunable. Existing villagers start fresh, since the save has no job-start date to seed from.
 - **Penny Pincher** — Auto-stand-down rat catchers when no infestations are active, and guard towers in peacetime. Re-enables automatically when threats reappear, with a 2-day cooldown after raids end to avoid flickering. Won't touch a building you currently have selected.
 - **Idle Hands** — A small icon appears on production buildings whose workers spend too much time idle. Tunable threshold.
 
@@ -75,7 +76,7 @@ Essential Provisions builds on the work of several community modders. Mod author
 - **Justin848** — **Fast Frontier Speed Mod** (Fast Forward)
 - **Cleve** — **Autocommute** (inspiration for Short Walks' approach)
 
-A few features are original EP designs built directly on FF's own internal systems: Consumable Control and Surplus Selling drive FF's trading-post quota system from observed consumption telemetry, Short Walks leverages FF's already-existing (but underused) Hungarian assignment infrastructure to expand its scope to all villagers, the Planting Almanac builds reusable crop-rotation templates on the crop-field window, and Learned Hands restores the educated-worker efficiency bonus the official guide describes but the assembly never implemented.
+A few features are original EP designs built directly on FF's own internal systems: Consumable Control and Surplus Selling drive FF's trading-post quota system from observed consumption telemetry, Short Walks leverages FF's already-existing (but underused) Hungarian assignment infrastructure to expand its scope to all villagers, the Planting Almanac builds reusable crop-rotation templates on the crop-field window, Learned Hands restores the educated-worker efficiency bonus the official guide describes but the assembly never implemented, and Workplace Mastery adds a job-tenure efficiency bonus tracked per occupation and persisted per save.
 
 ## Build
 
