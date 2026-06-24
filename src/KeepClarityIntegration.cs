@@ -200,6 +200,11 @@ namespace EssentialProvisions
                     label: "Efficient Labor",
                     tooltip: "Idle villagers in crafting and outdoor roles help out as laborers when their own job has nothing to do. Their actual job stays the priority — they snap back the moment real work appears.",
                     order: 50));
+            Reg(GroupVillagers, Config.EfficientLaborPollDays,
+                NewMeta(label: "    Re-scan Every N Days",
+                    tooltip: "How often (in-game days) to scan for idle villagers to lend out and release those who found work. Idle status barely changes day-to-day, so 5 is plenty; lower = snappier, higher = lighter on big maps.",
+                    min: 1, max: 30,
+                    visibleWhen: () => Config.EnableEfficientLabor.Value, order: 51));
 
             Reg(GroupVillagers, Config.EnablePennyPincher,
                 NewMeta(

@@ -54,7 +54,7 @@ namespace EssentialProvisions.Features
         private static readonly List<Villager> _slackers = new List<Villager>();
         private static readonly List<LaborerResourceCollectionSearchEntry> _entries = new List<LaborerResourceCollectionSearchEntry>();
 
-        private static int _lastCheckedDayOfYear = -1;
+        private static int _lastCheckedAbsDay = -1;
         private static bool _wasEnabled;
 
         public static void Reset()
@@ -62,7 +62,7 @@ namespace EssentialProvisions.Features
             ClearAllSlackers(); // best-effort — managers may already be gone on scene change
             _slackers.Clear();
             _entries.Clear();
-            _lastCheckedDayOfYear = -1;
+            _lastCheckedAbsDay = -1;
             _wasEnabled = false;
             _allowedOccupationInts.Clear();
             _lastParsedOccupationsRaw = "";
@@ -103,10 +103,16 @@ namespace EssentialProvisions.Features
             }
             if (_allowedOccupationInts.Count == 0) return;
 
-            // Day-change poll — match NMSO's cadence. Cheaper than per-frame.
-            int currentDay = tm.currentDate.dayOfYear;
-            if (currentDay == _lastCheckedDayOfYear) return;
-            _lastCheckedDayOfYear = currentDay;
+            // Poll every N in-game days (Config.EfficientLaborPollDays, default 5).
+            // Idle status barely shifts day-to-day, so scanning every single day is
+            // wasteful. Absolute day = year*360 + dayOfYear is monotonic and wrap-free
+            // (raw dayOfYear resets each year). Runs on the first tick after enabling /
+            // loading, then every interval days.
+            var date = tm.currentDate;
+            int absDay = date.year * 360 + date.dayOfYear;
+            int interval = Math.Max(1, Config.EfficientLaborPollDays.Value);
+            if (_lastCheckedAbsDay >= 0 && absDay - _lastCheckedAbsDay < interval) return;
+            _lastCheckedAbsDay = absDay;
 
             try
             {
@@ -117,7 +123,7 @@ namespace EssentialProvisions.Features
                 if (added > 0 || removed > 0)
                 {
                     Plugin.Log.Msg(
-                        $"[EfficientLabor] Day {currentDay}: +{added} idle villager(s) → laborer pool" +
+                        $"[EfficientLabor] Day {date.dayOfYear}: +{added} idle villager(s) → laborer pool" +
                         (added > 0 ? $" ({FormatOccupationBreakdown(addedByOcc)})" : "") +
                         $", -{removed} returned to work, {_slackers.Count} now active.");
                 }

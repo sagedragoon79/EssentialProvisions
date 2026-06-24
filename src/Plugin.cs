@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.3.0", "sagedragoon79")]
+[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.3.1", "sagedragoon79")]
 [assembly: MelonGame("Crate Entertainment", "Farthest Frontier")]
 
 namespace EssentialProvisions

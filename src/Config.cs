@@ -66,6 +66,7 @@ namespace EssentialProvisions
         // ----- Efficient Labor (folded from NoMoreSlackingOff + FFAutomation IdleFarmers) -----
         public static MelonPreferences_Entry<bool>   EnableEfficientLabor       { get; private set; } = null!;
         public static MelonPreferences_Entry<string> EfficientLaborOccupations  { get; private set; } = null!;
+        public static MelonPreferences_Entry<int>    EfficientLaborPollDays     { get; private set; } = null!;
         public static MelonPreferences_Entry<bool>   EfficientLaborVerbose      { get; private set; } = null!;
 
         // ----- Consumable Control (rate-based "Town Reserve" only — equivalent to FFAutomation Town Reserve) -----
@@ -228,6 +229,11 @@ namespace EssentialProvisions
                 "Hunter,Builder,Woodcutter,Sawyer,Farmer,Baker,Tanner,Miller,Miner,Foundryman,Blacksmith,Fletcher,Fisherman,Cobbler,Smoker,Weaver,CharcoalMaker,Potter,BoatBuilder,Forager,Brewer,Wainwright,BasketMaker,Herder,Groomer,FurnitureMaker,SoapMaker,Chandler,Glassmaker,Brickmaker,Cheesemaker,Cooper,Apothecary,Armourer,Arborist,Preservist,Papermaker,BookBinder",
                 display_name: "Efficient Labor: Allowed Occupations",
                 description: "Comma-separated list of FF Occupation enum names. Villagers in these occupations will be redirected to laborer work when truly idle. Edit this cfg field directly to add/remove occupations — not surfaced in the KC panel to keep it uncluttered. Restart the game for changes to apply.");
+
+            EfficientLaborPollDays = _root.CreateEntry(
+                "EfficientLaborPollDays", 5,
+                display_name: "    Re-scan Every N Days",
+                description: "How often (in in-game days) to scan for newly-idle villagers to lend to the laborer pool and to release those who picked up real work. Idle status barely changes day-to-day, so a 5-day cadence is plenty; lower = snappier response, higher = lighter on large maps. Range 1-30. Runs once immediately when enabled, then on this cadence.");
 
             EfficientLaborVerbose = _root.CreateEntry(
                 "EfficientLaborVerbose", false,

@@ -20,7 +20,7 @@
     <Platforms>AnyCPU;x64</Platforms>
 
     <!-- The one knob to bump on every release. -->
-    <Version>1.3.0</Version>
+    <Version>1.3.1</Version>
 
     <!-- Derived from <Version> so Explorer's hover tooltip + Properties
          dialog stay in lockstep. Suffixing .0 makes them legal 4-part

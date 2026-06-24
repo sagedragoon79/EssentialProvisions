@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.1 — 2026-06-19
+
+### Changed
+- **Efficient Labor** — now re-scans for idle villagers **every N in-game days**
+  (default 5, range 1–30, `EfficientLaborPollDays`) instead of every single day.
+  Idle status barely shifts day-to-day, so this is much lighter on large maps with
+  no real loss in responsiveness; the first scan still runs immediately on
+  enable/load, and idle villagers are released back to their jobs on the same
+  cadence. Surfaced in the Keep Clarity panel under Efficient Labor.
+
 ## 1.3.0 — 2026-06-19
 
 ### Added
