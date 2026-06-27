@@ -9,6 +9,7 @@
 //             selected-building skip all mirror FFAutomation exactly.
 
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Reflection;
 using MelonLoader;
@@ -33,12 +34,18 @@ namespace EssentialProvisions.Features
         private static float _nextPoll = float.MinValue;
         private static bool  _lastThreatActive;
         private static int?  _raidEndedTotalDay;
+        private static bool  _wasManagingGuardTowers;
+        // Instance IDs of the guard towers EP itself stood down, so a sub-toggle-off re-mans
+        // exactly those and never force-enables a tower the player disabled by hand.
+        private static readonly HashSet<int> _stoodDownTowers = new HashSet<int>();
 
         public static void Reset()
         {
-            _nextPoll          = float.MinValue;
-            _lastThreatActive  = false;
-            _raidEndedTotalDay = null;
+            _nextPoll               = float.MinValue;
+            _lastThreatActive       = false;
+            _raidEndedTotalDay      = null;
+            _wasManagingGuardTowers = false;
+            _stoodDownTowers.Clear();
         }
 
         public static void OnUpdate()
@@ -57,7 +64,21 @@ namespace EssentialProvisions.Features
             try
             {
                 UpdateRatCatchers(gm);
-                UpdateGuardTowers(gm);
+
+                bool manageGuardTowers = Config.PennyPincherGuardTowers.Value;
+                if (manageGuardTowers)
+                {
+                    UpdateGuardTowers(gm);
+                }
+                else if (_wasManagingGuardTowers)
+                {
+                    // Sub-toggle just turned off — re-man any towers we'd stood down so
+                    // they aren't left stranded unmanned, then hand control back to the player.
+                    ReleaseGuardTowers(gm);
+                    _lastThreatActive  = false;
+                    _raidEndedTotalDay = null;
+                }
+                _wasManagingGuardTowers = manageGuardTowers;
             }
             catch (Exception ex)
             {
@@ -130,8 +151,34 @@ namespace EssentialProvisions.Features
                 var tower = towers[i];
                 if (tower == null) continue;
                 var building = (Building)(object)tower;
+                bool wasEnabled = building.isWorkEnabled;
                 ToggleBuilding(gm, building, threatActive, cooldownElapsed);
+                // Record only the towers WE just stood down (was on → now off). EP never touches an
+                // already-disabled tower, so this set holds exactly EP's stand-downs.
+                if (wasEnabled && !building.isWorkEnabled) _stoodDownTowers.Add(building.GetInstanceID());
+                else if (!wasEnabled && building.isWorkEnabled) _stoodDownTowers.Remove(building.GetInstanceID());
             }
+        }
+
+        /// <summary>
+        /// Re-man only the guard towers EP itself stood down. Called once when the
+        /// "Stand Down Guard Towers" sub-toggle is switched off, so the player isn't
+        /// left with peacetime-disabled towers they now have to re-enable by hand —
+        /// without force-enabling any tower the player chose to disable manually.
+        /// </summary>
+        private static void ReleaseGuardTowers(GameManager gm)
+        {
+            var towers = gm.resourceManager?.guardTowersRO;
+            if (towers == null) { _stoodDownTowers.Clear(); return; }
+            for (int i = 0; i < towers.Count; i++)
+            {
+                var tower = towers[i];
+                if (tower == null) continue;
+                var building = (Building)(object)tower;
+                if (_stoodDownTowers.Contains(building.GetInstanceID()) && !building.isWorkEnabled)
+                    building.SetWorkEnabled(true, true);
+            }
+            _stoodDownTowers.Clear();
         }
 
         private static bool HasNonCampRaidTracker(GameManager gm)
@@ -198,7 +245,7 @@ namespace EssentialProvisions.Features
             var tm = gm.timeManager;
             if (tm == null) return 0;
             var d = tm.currentDate;
-            return d.year * 365 + d.dayOfYear;
+            return d.year * 360 + d.dayOfYear;   // FF year = 360 days (12 × 30) — keeps the cooldown delta monotonic across year rollover
         }
 
         /// <summary>

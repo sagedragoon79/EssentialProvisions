@@ -211,6 +211,10 @@ namespace EssentialProvisions
                     label: "Penny Pincher",
                     tooltip: "Auto-stand-down rat catchers when no infestations are active, and guard towers when no raids are present. Auto re-enables when threats reappear. Won't touch a building you currently have selected.",
                     order: 60));
+            Reg(GroupVillagers, Config.PennyPincherGuardTowers,
+                NewMeta(label: "    Stand Down Guard Towers",
+                    tooltip: "Also stand down guard towers in peacetime (re-manned when raids approach). Turn off to keep guard towers fully under your control while still auto-managing rat catchers — turning it off immediately re-mans any towers it had stood down.",
+                    visibleWhen: () => Config.EnablePennyPincher.Value, order: 61));
 
             Reg(GroupVillagers, Config.EnableIdleHands,
                 NewMeta(
@@ -226,29 +230,20 @@ namespace EssentialProvisions
             Reg(GroupVillagers, Config.EnableLearnedHands,
                 NewMeta(
                     label: "Learned Hands",
-                    tooltip: "Educated villagers work faster at every job. Closes a vanilla gap — the official guide claims this but the assembly doesn't actually implement it. Default +10% per education level. Takes effect immediately.",
+                    tooltip: "Educated villagers work faster — gathering, field work, AND crafting. +10% per education level. Closes a vanilla gap the official guide describes but the game never implements. Stacks on Workplace Mastery. On/off — no slider.",
                     order: 80));
-            Reg(GroupVillagers, Config.LearnedHandsPerLevelBonus,
-                NewMeta(label: "    Bonus per Education Level",
-                    tooltip: "Work-speed bonus added per education level (0.10 = +10%/level).",
-                    min: 0f, max: 0.5f,
-                    visibleWhen: () => Config.EnableLearnedHands.Value, order: 81));
 
             Reg(GroupVillagers, Config.EnableWorkplaceMastery,
                 NewMeta(
                     label: "Workplace Mastery",
-                    tooltip: "Villagers work faster the longer they hold the same job. Default +2% per year of tenure, capped at +10%. Stacks on Learned Hands. Tenure persists per-save; existing villagers start fresh (no job-start date exists in the save to seed from). Adds a Mastery readout to the villager picker.",
+                    tooltip: "Villagers work faster the longer they hold the same job — gathering, field work, AND crafting. +1%/yr of tenure, capped at +25% (25 yr). Stacks on Learned Hands. Tenure is per-occupation, persists per-save; existing villagers start fresh. Adds a Mastery readout to the villager picker. On/off — no slider.",
                     order: 90));
-            Reg(GroupVillagers, Config.WorkplaceMasteryPerYearPct,
-                NewMeta(label: "    Bonus per Year of Tenure (%)",
-                    tooltip: "Work-speed bonus per in-game year (360 days) in the current job.",
-                    min: 1, max: 3,
-                    visibleWhen: () => Config.EnableWorkplaceMastery.Value, order: 91));
-            Reg(GroupVillagers, Config.WorkplaceMasteryYearsCap,
-                NewMeta(label: "    Tenure Cap (years)",
-                    tooltip: "Tenure stops earning bonus past this many years. At +2%/yr, 5 years = +10% max. 0 suspends the bonus (tracking continues).",
-                    min: 0, max: 25,
-                    visibleWhen: () => Config.EnableWorkplaceMastery.Value, order: 92));
+
+            Reg(GroupVillagers, Config.EnableRabiesTreatable,
+                NewMeta(
+                    label: "Rabies: Treatable (longshot)",
+                    tooltip: "Makes vanilla's guaranteed-fatal rabies a slim, healer-dependent chance. A rabid villager falls bedridden and is treated in a sick bed — ~9% in a Healer's House up to ~18% with a stocked Hospital. The cost: they stop working and occupy a sick bed while ill, and die at home if no healer bed is reachable. Deliberate balance change. OFF by default.",
+                    order: 100));
 
             // ============================================================
             // === Inventory Management ===

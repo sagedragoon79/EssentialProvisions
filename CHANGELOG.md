@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.4.0 — 2026-06-26
+
+### Added
+- **Rabies: Treatable (longshot)** (new feature, OFF by default) — vanilla rabies is a
+  guaranteed death sentence no healer can touch. This opens a slim, healer-dependent
+  chance: a rabid villager falls **bedridden** and is treated in a healer's sick bed,
+  where the cure chance scales with care — roughly **~9% at a staffed Healer's House**
+  up to **~18% at a stocked Hospital**. The cost: while ill they stop working and occupy
+  a sick bed for up to 60 days, and with no reachable healer bed they're bedridden at
+  home and almost certainly still die. A deliberate balance change; only affects
+  villagers infected after you enable it.
+- **Keep Clarity disease interop (`DiseaseInfoApi`)** — EP exposes a soft-dep API so Keep
+  Clarity can show a sick villager's recovery odds and treatment guidance in its
+  villager/hospital UI: per-disease cure chance, full-course and best-case recovery %,
+  the cure path (needs clean water / diet / warmth / soap / a Healer's House / a Hospital),
+  and whether the illness is lethal if left untreated. Does nothing without Keep Clarity.
+
+### Changed
+- **Learned Hands & Workplace Mastery now speed up crafting too.** The work-rate bonus
+  previously reached only resource gathering and field work — manufacturing throughput
+  was unaffected despite the work-rate icon implying otherwise. Both bonuses now also
+  apply to **crafting/manufacturing output** (smithing, baking, weaving, and the like).
+- **Workplace Mastery retuned** to **+1% per year of tenure, capped at +25% (25 years)**
+  (was +2%/yr capped at +10%).
+- **Learned Hands & Workplace Mastery are now on/off — the tuning sliders are removed.**
+  Rates are fixed by design (+10% per education level; +1%/yr tenure) and rebalanced via
+  updates if needed. The `LearnedHandsPerLevelBonus`, `WorkplaceMasteryPerYearPct`, and
+  `WorkplaceMasteryYearsCap` preferences are gone.
+- **Penny Pincher** gained a **"Stand Down Guard Towers" sub-toggle** — turn it off to
+  keep guard towers fully under your control while still auto-managing rat catchers.
+  Turning it off immediately re-mans any towers Penny Pincher had stood down (and leaves
+  towers you disabled yourself alone).
+- **Keep Clarity work-bonus interop (`WorkInfoApi`)** split into numeric getters
+  (education %, mastery %, multiplicative total, top mastered jobs) so KC can render the
+  villager-window readout however it likes.
+
+### Fixed
+- **Workplace Mastery no longer credits non-working roles** — children, the disabled,
+  deserters, and the soldier-transition state no longer accrue or display a tenure bonus.
+
 ## 1.3.1 — 2026-06-19
 
 ### Changed

@@ -3,10 +3,19 @@
 // 1-3%/year and a 0-25 year cap. Original EP feature, OFF by default.
 //
 // HOW IT STACKS: a SECOND Harmony postfix on the same chokepoint Learned Hands uses —
-// HappinessManager.GetWorkRateMultiplier(Villager) (the 1-arg overload, which covers
-// resource collection directly and manufacturing via the 4-arg's internal delegation).
-// Both postfixes multiply __result, and multiplication commutes, so the order Harmony
-// runs them in is irrelevant: final = base × (1 + education) × (1 + tenure).
+// HappinessManager.GetWorkRateMultiplier(Villager) (the 1-arg overload). Both postfixes
+// multiply __result, and multiplication commutes, so order is irrelevant:
+// final = base × (1 + education) × (1 + tenure).
+//
+// COVERAGE (verified against the decompile, _research/mastery-coverage-map.md): the
+// work-rate multiplier is consumed in exactly ONE work tick —
+// ReservableItemStorage.DetachItemsFromReservation — which gates resource EXTRACTION
+// (wood/mining/foraging), field TILLING/PLANTING/MAINTENANCE, clearing/repair/explore/
+// excavate/salvage, and hunter BUTCHERING. It does NOT reach MANUFACTURING throughput
+// (the old "covers manufacturing via the 4-arg delegation" claim was wrong — the 4-arg
+// only paints the work-rate icon). Crafting is covered separately by ManufacturePatch
+// below (a postfix on ManufactureWorkOrder.AdjustAddedWorkUnits) which applies BOTH the
+// education and tenure terms so educated/veteran crafters finally speed up too.
 //
 // TENURE MODEL: per villager we keep {occupation -> committed days} plus the currently-
 // open tenure (occupation + the absolute in-game day it began). "Open" days are derived
@@ -38,6 +47,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using HarmonyLib;
 using MelonLoader;
 using TMPro;
@@ -52,6 +62,24 @@ namespace EssentialProvisions.Features
         private const float DaysPerYear = 360f;   // TimeManager.DAYS_PER_YEAR (12 mo × 30 d)
         private const int OccNone = 59;           // VillagerOccupation.Occupation.None
 
+        // Occupations that don't practice a trade: they must neither accrue nor display mastery
+        // tenure (else KC lights up a "+X% Mastery Bonus" on, e.g., a child's job line). Child grows
+        // up; Disabled *pauses* (prior tenure is committed first, then preserved — not lost — and
+        // resumes on recovery); Deserter has left the settlement; TransitionToSoldier is a transient
+        // state; None is the no-job sentinel. Gated on BOTH the read path (hides childhood days banked
+        // by older saves) and the accrual path (never stores them going forward).
+        private const int OccTransitionToSoldier = 13;
+        private const int OccChild = 21;
+        private const int OccDeserter = 29;
+        private const int OccDisabled = 35;
+        private static readonly HashSet<int> NonWorkingOccupations =
+            new HashSet<int> { OccTransitionToSoldier, OccChild, OccDeserter, OccDisabled, OccNone };
+        private static bool AccruesMastery(int occ) => !NonWorkingOccupations.Contains(occ);
+
+        // Hardcoded tuning (on/off feature, no sliders — rebalance by patching).
+        internal const float TenureCapYears = 25f;     // tenure stops earning past 25 years
+        internal const float WorkOutputPerYear = 0.01f; // +1%/yr on gather/farm/craft → +25% at cap
+
         // In-memory tenure, keyed by villager instanceID (matches how EfficientLabor /
         // ConsumableControl / LearnedHands key villagers within a session). The disk
         // sidecar is keyed by composite key; we bridge the two at load/save time.
@@ -62,6 +90,8 @@ namespace EssentialProvisions.Features
         private static bool _hydrated;            // sidecar loaded for the current save
         private static bool _firstApplicationLogged;
         private static bool _workRateErrorLogged;
+        private static bool _mfgFirstLogged;
+        private static bool _mfgErrorLogged;
 
         public static void Reset()
         {
@@ -71,6 +101,8 @@ namespace EssentialProvisions.Features
             _hydrated = false;
             _firstApplicationLogged = false;
             _workRateErrorLogged = false;
+            _mfgFirstLogged = false;
+            _mfgErrorLogged = false;
         }
 
         // One-time setup from Plugin.OnInitializeMelon. Manually patches the picker UI
@@ -216,7 +248,7 @@ namespace EssentialProvisions.Features
             if (rec.CurrentOcc == liveOcc) return;
             CommitOpen(rec, now);
             rec.CurrentOcc = liveOcc;
-            rec.CurrentStartAbsDay = liveOcc != OccNone ? now : -1;
+            rec.CurrentStartAbsDay = AccruesMastery(liveOcc) ? now : -1;
         }
 
         private static void OnStartSave(StartSaveGameEvent e)
@@ -253,7 +285,7 @@ namespace EssentialProvisions.Features
             int now = AbsDay();
             CommitOpen(rec, now);
             rec.CurrentOcc = (int)e.occupation;
-            rec.CurrentStartAbsDay = rec.CurrentOcc != OccNone ? now : -1;
+            rec.CurrentStartAbsDay = AccruesMastery(rec.CurrentOcc) ? now : -1;
         }
 
         private static void OnLeft(VillagerLeftOccupationEvent e)
@@ -282,7 +314,7 @@ namespace EssentialProvisions.Features
         // open-tenure start to 'now' so the same days aren't counted twice.
         private static void CommitOpen(MasteryRecord rec, int now)
         {
-            if (rec.CurrentStartAbsDay < 0 || rec.CurrentOcc == OccNone || now < 0) return;
+            if (rec.CurrentStartAbsDay < 0 || !AccruesMastery(rec.CurrentOcc) || now < 0) return;
             int d = now - rec.CurrentStartAbsDay;
             if (d > 0)
             {
@@ -313,14 +345,38 @@ namespace EssentialProvisions.Features
             bonusPct = 0f;
             if (v == null || v.occupation == null) return false;
             int occ = (int)v.occupation.GetOccupation();
-            if (occ == OccNone) return false;
+            if (!AccruesMastery(occ)) return false;
             float years = YearsFor(v.GetInstanceID(), occ);
             if (years <= 0f) return false;
-            int perYearPct = Config.WorkplaceMasteryPerYearPct.Value;
-            int yearsCap = Config.WorkplaceMasteryYearsCap.Value;
-            if (perYearPct <= 0 || yearsCap <= 0) return false;
-            bonusPct = Mathf.Min(years, yearsCap) * perYearPct; // perYearPct is already a percent
+            bonusPct = Mathf.Min(years, TenureCapYears) * (WorkOutputPerYear * 100f); // → percent
             return bonusPct > 0f;
+        }
+
+        // Interop (for WorkInfoApi): a villager's highest-mastery occupations, sorted DESC by
+        // bonus, up to `count`, excluding zero. Each entry = (display name, bonus percent points,
+        // e.g. "Blacksmith" + 8f). Empty when the feature is off / no tenure / null villager.
+        internal static List<KeyValuePair<string, float>> GetTopMasteries(Villager v, int count)
+        {
+            var result = new List<KeyValuePair<string, float>>();
+            if (v == null || count <= 0 || !Config.EnableWorkplaceMastery.Value) return result;
+            int id = v.GetInstanceID();
+            if (!_byInstance.TryGetValue(id, out var rec)) return result;
+
+            var occs = new HashSet<int>(rec.Days.Keys);
+            if (AccruesMastery(rec.CurrentOcc)) occs.Add(rec.CurrentOcc);
+
+            var ranked = new List<KeyValuePair<int, float>>();
+            foreach (var occ in occs)
+            {
+                if (!AccruesMastery(occ)) continue;   // hide childhood/disabled tenure banked by older saves
+                float years = YearsFor(id, occ);
+                float pct = Mathf.Min(years, TenureCapYears) * (WorkOutputPerYear * 100f);
+                if (pct > 0f) ranked.Add(new KeyValuePair<int, float>(occ, pct));
+            }
+            ranked.Sort((a, b) => b.Value.CompareTo(a.Value));
+            for (int i = 0; i < ranked.Count && i < count; i++)
+                result.Add(new KeyValuePair<string, float>(PrettyOcc(ranked[i].Key), ranked[i].Value));
+            return result;
         }
 
         private static int SafeOcc(Villager v)
@@ -373,17 +429,12 @@ namespace EssentialProvisions.Features
                     if (villager == null || villager.occupation == null) return;
 
                     int occ = (int)villager.occupation.GetOccupation();
-                    if (occ == OccNone) return;
+                    if (!AccruesMastery(occ)) return;
 
                     float years = YearsFor(villager.GetInstanceID(), occ);
                     if (years <= 0f) return;
 
-                    int perYearPct = Config.WorkplaceMasteryPerYearPct.Value;   // 1..3
-                    int yearsCap = Config.WorkplaceMasteryYearsCap.Value;       // 0..25
-                    if (perYearPct <= 0 || yearsCap <= 0) return;
-
-                    float cappedYears = Mathf.Min(years, yearsCap);
-                    float bonus = cappedYears * (perYearPct / 100f);
+                    float bonus = Mathf.Min(years, TenureCapYears) * WorkOutputPerYear;
                     if (bonus <= 0f) return;
 
                     float before = __result;
@@ -402,6 +453,80 @@ namespace EssentialProvisions.Features
                     {
                         _workRateErrorLogged = true;
                         Plugin.Log.Warning($"[WorkplaceMastery] WorkRatePatch error (suppressed further): {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        // ----- Manufacturing throughput (crafting) — applies BOTH education and tenure -----
+        //
+        // The work-rate hook above never reaches crafting (see header). Crafting throughput is
+        // ManufactureWorkOrder.AddWorkUnits → AdjustAddedWorkUnits, which returns the work
+        // units applied this tick. We postfix it and add the competence bonus, gating the
+        // education term on Learned Hands and the tenure term on Workplace Mastery (same rates
+        // as the work-rate hook, so the two stay consistent). assignedWorker IS the crafting
+        // Villager (Villager : IManufacturer). Because the method returns a uint and a tick can
+        // be as small as 1 unit, a naive multiply would floor a +10% bonus away — so we
+        // accumulate the fractional bonus per work-order and emit whole units as they accrue.
+        private static readonly ConditionalWeakTable<ManufactureWorkOrder, StrongBox<float>> _mfgAccum
+            = new ConditionalWeakTable<ManufactureWorkOrder, StrongBox<float>>();
+
+        [HarmonyPatch(typeof(ManufactureWorkOrder), "AdjustAddedWorkUnits")]
+        internal static class ManufacturePatch
+        {
+            private static void Postfix(ManufactureWorkOrder __instance, uint amount, ref uint __result)
+            {
+                bool edu = Config.EnableLearnedHands.Value;
+                bool tenure = Config.EnableWorkplaceMastery.Value;
+                if ((!edu && !tenure) || amount == 0u || __instance == null) return;
+                try
+                {
+                    var v = __instance.assignedWorker as Villager;
+                    if (v == null) return;
+
+                    float factor = 1f;
+
+                    if (edu)
+                    {
+                        var e = v.education;
+                        int level = (e != null && e.currentLevel != null) ? e.currentLevel.level : 0;
+                        if (level > 0) factor *= 1f + level * LearnedHands.PerLevel;
+                    }
+
+                    if (tenure && v.occupation != null)
+                    {
+                        int occ = (int)v.occupation.GetOccupation();
+                        if (AccruesMastery(occ))   // parity with WorkRatePatch — no Child/Disabled/etc. crafting tenure
+                        {
+                            float years = YearsFor(v.GetInstanceID(), occ);
+                            if (years > 0f)
+                                factor *= 1f + Mathf.Min(years, TenureCapYears) * WorkOutputPerYear;
+                        }
+                    }
+
+                    if (factor <= 1f) return;
+
+                    var box = _mfgAccum.GetOrCreateValue(__instance);
+                    box.Value += amount * (factor - 1f);
+                    if (box.Value >= 1f)
+                    {
+                        uint whole = (uint)Mathf.FloorToInt(box.Value);
+                        box.Value -= whole;
+                        __result += whole;
+
+                        if (!_mfgFirstLogged)
+                        {
+                            _mfgFirstLogged = true;
+                            Plugin.Log.Msg($"[WorkplaceMastery] First manufacturing bonus applied: ×{factor:F3} (+{whole} work unit this tick).");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (!_mfgErrorLogged)
+                    {
+                        _mfgErrorLogged = true;
+                        Plugin.Log.Warning($"[WorkplaceMastery] ManufacturePatch error (suppressed further): {ex.Message}");
                     }
                 }
             }
@@ -455,11 +580,12 @@ namespace EssentialProvisions.Features
             if (!_byInstance.TryGetValue(id, out var rec)) { rows.Add("Mastery: none yet"); return rows; }
 
             var occs = new HashSet<int>(rec.Days.Keys);
-            if (rec.CurrentOcc != OccNone) occs.Add(rec.CurrentOcc);
+            if (AccruesMastery(rec.CurrentOcc)) occs.Add(rec.CurrentOcc);
 
             var ranked = new List<KeyValuePair<int, float>>();
             foreach (var occ in occs)
             {
+                if (!AccruesMastery(occ)) continue;   // hide childhood/disabled tenure banked by older saves
                 float y = YearsFor(id, occ);
                 if (y > 0f) ranked.Add(new KeyValuePair<int, float>(occ, y));
             }

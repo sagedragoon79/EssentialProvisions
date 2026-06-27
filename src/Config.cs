@@ -53,7 +53,8 @@ namespace EssentialProvisions
         // ===== Automation bucket =====
 
         // ----- Penny Pincher (folded from FFAutomation by idontcare) -----
-        public static MelonPreferences_Entry<bool> EnablePennyPincher { get; private set; } = null!;
+        public static MelonPreferences_Entry<bool> EnablePennyPincher        { get; private set; } = null!;
+        public static MelonPreferences_Entry<bool> PennyPincherGuardTowers   { get; private set; } = null!;
 
         // ----- Clearcutting (folded from FFAutomation by idontcare) -----
         public static MelonPreferences_Entry<bool>  EnableClearcutting        { get; private set; } = null!;
@@ -104,14 +105,17 @@ namespace EssentialProvisions
         public static MelonPreferences_Entry<bool> EnablePlantingAlmanac { get; private set; } = null!;
 
         // ----- Learned Hands (original EP feature: educated villagers work faster) -----
-        public static MelonPreferences_Entry<bool>  EnableLearnedHands        { get; private set; } = null!;
-        public static MelonPreferences_Entry<float> LearnedHandsPerLevelBonus { get; private set; } = null!;
-        public static MelonPreferences_Entry<bool>  LearnedHandsVerbose       { get; private set; } = null!;
+        public static MelonPreferences_Entry<bool>  EnableLearnedHands { get; private set; } = null!;
+        public static MelonPreferences_Entry<bool>  LearnedHandsVerbose { get; private set; } = null!;
 
         // ----- Workplace Mastery (original EP feature: villagers work faster the longer they hold a job) -----
-        public static MelonPreferences_Entry<bool> EnableWorkplaceMastery     { get; private set; } = null!;
-        public static MelonPreferences_Entry<int>  WorkplaceMasteryPerYearPct { get; private set; } = null!;
-        public static MelonPreferences_Entry<int>  WorkplaceMasteryYearsCap   { get; private set; } = null!;
+        public static MelonPreferences_Entry<bool> EnableWorkplaceMastery { get; private set; } = null!;
+
+        // ----- Rabies: Treatable (original EP balance toggle) -----
+        public static MelonPreferences_Entry<bool> EnableRabiesTreatable { get; private set; } = null!;
+
+        // ----- Disease Roster Dump (cfg-only diagnostic; validates the DiseaseInfoApi cure derivation) -----
+        public static MelonPreferences_Entry<bool> DiseaseRosterDump { get; private set; } = null!;
 
         // ----- Project Prep (folded from FFAutomation ConstructionReserve) -----
         public static MelonPreferences_Entry<bool> EnableProjectPrep   { get; private set; } = null!;
@@ -178,6 +182,11 @@ namespace EssentialProvisions
                 "EnablePennyPincher", false,
                 display_name: "Penny Pincher",
                 description: "Auto-stand-down rat catchers when no infestations exist, and guard towers in peacetime — save gold on workers with nothing to do. Auto re-enables when threats reappear.");
+
+            PennyPincherGuardTowers = _root.CreateEntry(
+                "PennyPincherGuardTowers", true,
+                display_name: "    Stand Down Guard Towers",
+                description: "When on, Penny Pincher also stands down guard towers during peacetime (re-manning them when raids approach, after a 2-day cooldown). Turn off to leave guard towers fully under your control while still auto-managing rat catchers. Turning this off immediately re-mans any towers Penny Pincher had stood down.");
 
             // ----- Clearcutting -----
             EnableClearcutting = _root.CreateEntry(
@@ -314,12 +323,7 @@ namespace EssentialProvisions
             EnableLearnedHands = _root.CreateEntry(
                 "EnableLearnedHands", false,
                 display_name: "Learned Hands",
-                description: "Educated villagers work faster at every job — closes a vanilla gap (the official guide claims this but the assembly never implements it). Default +10% per education level (today's basic education = +10%). Multiplicative bonus stacked on top of vanilla's happiness/tool/tech terms. Toggle is live; takes effect immediately.");
-
-            LearnedHandsPerLevelBonus = _root.CreateEntry(
-                "LearnedHandsPerLevelBonus", 0.10f,
-                display_name: "    Bonus per Education Level",
-                description: "Work-speed bonus added per education level. 0.10 = +10% per level. Today only level 0 (none) and level 1 (basic) exist, so this is effectively +10% for educated villagers — but if Crate ever ships higher tiers the formula scales automatically.");
+                description: "Educated villagers work faster — closes a vanilla gap (the official guide claims this but the assembly never implements it). +10% per education level (today's basic education = +10%), applied to resource gathering, field work, AND crafting/manufacturing. Multiplicative, stacks on Workplace Mastery and vanilla's happiness/tool/tech terms. Toggle is live. (No tuning slider — on/off by design; rebalanced via patches if needed.)");
 
             LearnedHandsVerbose = _root.CreateEntry(
                 "LearnedHandsVerbose", false,
@@ -330,17 +334,19 @@ namespace EssentialProvisions
             EnableWorkplaceMastery = _root.CreateEntry(
                 "EnableWorkplaceMastery", false,
                 display_name: "Workplace Mastery",
-                description: "Villagers get a small, growing work-rate bonus the longer they hold the same job. Default +2% per in-game year of tenure, capped at +10% (5 years). Multiplicative; stacks on Learned Hands and the vanilla happiness/tool/tech terms. Tenure is tracked per occupation and persists per-save. Existing villagers start at 0 — Farthest Frontier stores no job-start date to seed from, so tenure accrues from when you enable it. Toggle is live.");
+                description: "Villagers work faster the longer they hold the same job: +1% per in-game year of tenure, capped at +25% (25 years), on resource gathering, field work, AND crafting/manufacturing. Multiplicative, stacks on Learned Hands. Tenure is tracked per occupation and persists per-save; existing villagers start at 0 (Farthest Frontier stores no job-start date to seed from). Toggle is live. (No tuning slider — on/off by design; rebalanced via patches if needed.)");
 
-            WorkplaceMasteryPerYearPct = _root.CreateEntry(
-                "WorkplaceMasteryPerYearPct", 2,
-                display_name: "    Bonus per Year of Tenure (%)",
-                description: "Work-speed bonus added per in-game year (360 days) a villager has held their current job. Range 1-3.");
+            // ----- Rabies: Treatable -----
+            EnableRabiesTreatable = _root.CreateEntry(
+                "EnableRabiesTreatable", false,
+                display_name: "Rabies: Treatable (longshot)",
+                description: "Vanilla rabies is a guaranteed death sentence (no healer can ever cure it). This opens a slim, healer-dependent chance: a rabid villager now falls BEDRIDDEN and is treated in a healer's sick bed, where the cure chance scales with care — roughly ~9% in a staffed Healer's House up to ~18% with a stocked Hospital (and healer mastery, once added). THE COST: while ill the villager stops working and occupies 1 of the healer's 2 beds for up to 60 days; with no reachable healer bed they're bedridden at home and almost certainly still die. A deliberate balance change, OFF by default. Toggle is live (affects villagers infected after you enable it).");
 
-            WorkplaceMasteryYearsCap = _root.CreateEntry(
-                "WorkplaceMasteryYearsCap", 5,
-                display_name: "    Tenure Cap (years)",
-                description: "Tenure stops earning bonus past this many years. At the default +2%/yr, a 5-year cap = +10% max. Range 0-25. Set 0 to suspend the bonus while still tracking tenure for the Mastery column.");
+            // ----- Disease Roster Dump (diagnostic) -----
+            DiseaseRosterDump = _root.CreateEntry(
+                "DiseaseRosterDump", false,
+                display_name: "Disease Roster Dump (diagnostic)",
+                description: "When true, on the first map load EP logs every disease's cure classification, best-case recovery %, and raw cure data (cureFactors, finalCureChance, curve, effMin/Max) to Latest.log — used to validate the DiseaseInfoApi cure derivation against the disease roster. cfg-only; not surfaced in the KC panel. Leave OFF for normal play.");
 
             // ----- Broad Shelves -----
             EnableBroadShelves = _root.CreateEntry(

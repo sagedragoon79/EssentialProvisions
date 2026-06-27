@@ -5,15 +5,20 @@
 // (Knowledge/FF-Modding-Knowledge/game-systems/education-system.md §5). Education
 // is currently *only* a job-eligibility gate (Healer/School-teacher/Apothecary).
 //
-// Mechanism: single Harmony postfix on
+// Mechanism: Harmony postfix on
 //   HappinessManager.GetWorkRateMultiplier(Villager villager)
-// (decompile L377683). Originally the handoff proposed the 4-arg overload, but
-// the callgraph shows the 1-arg overload covers EVERY path that matters:
-//   - Resource collection (woodcutters/miners/foragers, L163242) calls the 1-arg
-//     DIRECTLY — the 4-arg patch would never fire for these.
-//   - Manufacturing (L237224/L237322) calls the 4-arg, which DELEGATES to the
-//     1-arg internally at L377711 — so a 1-arg patch catches them too.
-// Patching only the 1-arg covers both with no risk of double-application.
+// (decompile L377683). That multiplier is consumed in exactly ONE work tick —
+// ReservableItemStorage.DetachItemsFromReservation (L163242) — which covers
+// resource EXTRACTION (wood/mining/foraging), field tilling/planting/maintenance,
+// clearing/repair/explore/excavate/salvage, and hunter butchering.
+//
+// IMPORTANT — it does NOT reach MANUFACTURING throughput. The earlier note that the
+// 4-arg overload "delegates to the 1-arg so a 1-arg patch catches manufacturing too"
+// was wrong: the 4-arg (L237224/L237322) only paints the work-rate icon, while the
+// real crafting tick is ManufactureWorkOrder.AdjustAddedWorkUnits and never calls
+// the multiplier (see _research/mastery-coverage-map.md). So the education bonus now
+// reaches crafting through WorkplaceMastery.ManufacturePatch, which applies BOTH the
+// education term (gated on this feature) and the tenure term in one place.
 //
 // Multiply __result by 1 + level × perLevel. Scales with the dormant tier
 // framework: today level 1 = +10%; if Crate ships higher tiers the formula
@@ -28,6 +33,10 @@ namespace EssentialProvisions.Features
 {
     internal static class LearnedHands
     {
+        // Hardcoded education bonus per level (on/off feature, no slider — rebalance by
+        // patching). Also read by WorkplaceMastery.ManufacturePatch for the crafting hook.
+        internal const float PerLevel = 0.10f;   // +10% per education level
+
         // One-shot flag: log the first time the bonus actually applies, so the
         // feature's effect is observable without per-frame spam. Cleared on Reset.
         private static bool _firstApplicationLogged;
@@ -58,7 +67,7 @@ namespace EssentialProvisions.Features
                     int level = edu.currentLevel.level;
                     if (level <= 0) return;
 
-                    float perLevel = Config.LearnedHandsPerLevelBonus.Value;
+                    float perLevel = PerLevel;
                     float before = __result;
                     __result *= 1f + level * perLevel;
 

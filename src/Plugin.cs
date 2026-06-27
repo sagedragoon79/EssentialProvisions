@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.3.1", "sagedragoon79")]
+[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.4.0", "sagedragoon79")]
 [assembly: MelonGame("Crate Entertainment", "Farthest Frontier")]
 
 namespace EssentialProvisions
@@ -41,6 +41,7 @@ namespace EssentialProvisions
             // Features with one-time post-Config setup hooks.
             Features.ProjectPrep.Initialize();
             Features.WorkplaceMastery.Initialize();
+            Features.RabiesTreatable.Initialize();   // one-time cure-roll diagnostic patches
 
             // Soft-dep registration with Keep Clarity's settings panel. No-ops
             // cleanly when KC isn't installed.
@@ -113,6 +114,8 @@ namespace EssentialProvisions
             Features.PlantingAlmanac.Reset();
             Features.LearnedHands.Reset();
             Features.WorkplaceMastery.Reset();
+            Features.RabiesTreatable.Reset();
+            Common.DiseaseRosterDump.Reset();
         }
 
         /// <summary>
@@ -134,6 +137,8 @@ namespace EssentialProvisions
             Features.FastForward.OnUpdate();
             Features.ShortWalks.OnUpdate();
             Features.WorkplaceMastery.OnUpdate();
+            Features.RabiesTreatable.OnUpdate();
+            Common.DiseaseRosterDump.DumpOnce();
         }
     }
 }
