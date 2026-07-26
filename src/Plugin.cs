@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.4.0", "sagedragoon79")]
+[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.5.0", "sagedragoon79")]
 [assembly: MelonGame("Crate Entertainment", "Farthest Frontier")]
 
 namespace EssentialProvisions
@@ -42,6 +42,7 @@ namespace EssentialProvisions
             Features.ProjectPrep.Initialize();
             Features.WorkplaceMastery.Initialize();
             Features.RabiesTreatable.Initialize();   // one-time cure-roll diagnostic patches
+            Features.HarvestWatch.Initialize();      // one-time fruit-wipe tally patch
 
             // Soft-dep registration with Keep Clarity's settings panel. No-ops
             // cleanly when KC isn't installed.
@@ -115,6 +116,7 @@ namespace EssentialProvisions
             Features.LearnedHands.Reset();
             Features.WorkplaceMastery.Reset();
             Features.RabiesTreatable.Reset();
+            Features.HarvestWatch.Reset();
             Common.DiseaseRosterDump.Reset();
         }
 
@@ -138,7 +140,17 @@ namespace EssentialProvisions
             Features.ShortWalks.OnUpdate();
             Features.WorkplaceMastery.OnUpdate();
             Features.RabiesTreatable.OnUpdate();
+            Features.HarvestWatch.OnUpdate();
             Common.DiseaseRosterDump.DumpOnce();
+        }
+
+        /// <summary>
+        /// Lightweight on-screen toast (e.g. Penny Pincher tower-exemption confirmation).
+        /// Early-returns when nothing is showing.
+        /// </summary>
+        public override void OnGUI()
+        {
+            Common.Toast.Render();
         }
     }
 }

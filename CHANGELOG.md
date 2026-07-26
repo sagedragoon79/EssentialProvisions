@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.5.0 — 2026-07-26
+
+### Added
+- **Harvest Watch** (new feature, OFF by default) — worker-capacity feedback for
+  orchards, built for players running enlarged work areas or extra worker slots. At
+  each year-end fruit wipe it logs, per orchard, how many fruit trees went unharvested
+  and rotted — with the trend versus last year and the orchard's worker count — so
+  "add a worker or shrink the area" is a numbers call, not a guess. Also logs a
+  periodic live snapshot of trees currently holding unharvested fruit, and exposes
+  live counts to Keep Clarity via a new soft-dep `HarvestInfoApi`. Minimum-fruit
+  threshold tunable.
+- **Penny Pincher: per-tower exemptions** (player-requested) — select a guard tower
+  and press **Ctrl+P** to exempt it: Penny Pincher will never stand it down in
+  peacetime *or* re-man it during raids — that tower stays entirely under your
+  control. An on-screen banner confirms each toggle; Ctrl+P again re-enrolls it.
+  Exempting a tower Penny Pincher had already stood down re-mans it on the spot.
+  Exemptions persist per save (`UserData/EP_PennyPincher/`), and the key is
+  configurable (`PennyPincherExemptKey`; Ctrl is always required).
+
 ## 1.4.0 — 2026-06-26
 
 ### Added

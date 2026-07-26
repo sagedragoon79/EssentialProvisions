@@ -45,6 +45,10 @@ namespace EssentialProvisions
         // ----- Soil Wisdom (folded from FFQoL by idontcare) -----
         public static MelonPreferences_Entry<bool> EnableSoilWisdom { get; private set; } = null!;
 
+        // ----- Harvest Watch (original EP feature: orchard worker-capacity feedback) -----
+        public static MelonPreferences_Entry<bool> EnableHarvestWatch   { get; private set; } = null!;
+        public static MelonPreferences_Entry<int>  HarvestWatchMinFruit { get; private set; } = null!;
+
         // ===== Visual Aids bucket =====
 
         // ----- Service Bounds (folded from FFQoL by idontcare) -----
@@ -55,6 +59,7 @@ namespace EssentialProvisions
         // ----- Penny Pincher (folded from FFAutomation by idontcare) -----
         public static MelonPreferences_Entry<bool> EnablePennyPincher        { get; private set; } = null!;
         public static MelonPreferences_Entry<bool> PennyPincherGuardTowers   { get; private set; } = null!;
+        public static MelonPreferences_Entry<string> PennyPincherExemptKey   { get; private set; } = null!;
 
         // ----- Clearcutting (folded from FFAutomation by idontcare) -----
         public static MelonPreferences_Entry<bool>  EnableClearcutting        { get; private set; } = null!;
@@ -171,6 +176,17 @@ namespace EssentialProvisions
                 display_name: "Soil Wisdom",
                 description: "Highlight risky crop sequences in the crop info window — disease/season conflicts, rotation warnings.");
 
+            // ----- Harvest Watch -----
+            EnableHarvestWatch = _root.CreateEntry(
+                "EnableHarvestWatch", false,
+                display_name: "Harvest Watch",
+                description: "Orchard capacity feedback: at each year-end, logs how many fruit trees in each Arborist's work area went unharvested and rotted (FF silently wipes unpicked fruit once a year), with a trend vs last year and the building's worker count — so you know when to add workers or shrink the area. Especially useful with enlarged work areas. Also feeds a live unharvested-tree count to Keep Clarity's building panel. OFF by default.");
+
+            HarvestWatchMinFruit = _root.CreateEntry(
+                "HarvestWatchMinFruit", 3,
+                display_name: "Harvest Watch: Min Fruit to Flag",
+                description: "Minimum unharvested fruit on a tree before Harvest Watch counts it as neglected — used for both the year-end rot tally and the live count. Raise it to ignore trees with only a little fruit left. Range 1–50.");
+
             // ----- Service Bounds -----
             EnableServiceBounds = _root.CreateEntry(
                 "EnableServiceBounds", false,
@@ -186,7 +202,12 @@ namespace EssentialProvisions
             PennyPincherGuardTowers = _root.CreateEntry(
                 "PennyPincherGuardTowers", true,
                 display_name: "    Stand Down Guard Towers",
-                description: "When on, Penny Pincher also stands down guard towers during peacetime (re-manning them when raids approach, after a 2-day cooldown). Turn off to leave guard towers fully under your control while still auto-managing rat catchers. Turning this off immediately re-mans any towers Penny Pincher had stood down.");
+                description: "When on, Penny Pincher also stands down guard towers during peacetime (re-manning them when raids approach, after a 2-day cooldown). Turn off to leave guard towers fully under your control while still auto-managing rat catchers. Turning this off immediately re-mans any towers Penny Pincher had stood down. To exempt individual towers instead, select a tower and press Ctrl+P.");
+
+            PennyPincherExemptKey = _root.CreateEntry(
+                "PennyPincherExemptKey", "P",
+                display_name: "    Exempt Tower Hotkey (Ctrl + this key)",
+                description: "With a guard tower selected, hold Ctrl and press this key to toggle that tower's exemption from Penny Pincher. Exempt towers are never stood down or re-manned automatically — they stay fully under your control. Exemptions persist per save. Any Unity KeyCode name is valid (e.g. P, F9, Slash); invalid values fall back to P.");
 
             // ----- Clearcutting -----
             EnableClearcutting = _root.CreateEntry(

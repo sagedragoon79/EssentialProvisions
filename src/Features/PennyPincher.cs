@@ -7,11 +7,15 @@
 //             unit ("don't pay gold for workers with nothing to do"), so one switch.
 //             Polling cadence (5s), threat detection, 2-day guard cooldown, and
 //             selected-building skip all mirror FFAutomation exactly.
+//             EP addition (not in FFAutomation): per-tower exemptions — Ctrl+<key>
+//             on a selected tower marks it hands-off, persisted per save.
 
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Reflection;
+using System.Text;
 using MelonLoader;
 using UnityEngine;
 
@@ -39,6 +43,16 @@ namespace EssentialProvisions.Features
         // exactly those and never force-enables a tower the player disabled by hand.
         private static readonly HashSet<int> _stoodDownTowers = new HashSet<int>();
 
+        // Player-exempted towers: Penny Pincher never touches these (no peacetime stand-down,
+        // no threat re-man). Keyed by rounded world position — buildings never move, and FF
+        // instance IDs are re-mapped every load, so position is the stable per-save identity
+        // (same reasoning as WorkplaceMastery's composite-key sidecar). Persisted per save in
+        // UserData/EP_PennyPincher/<save>.txt, one key per line.
+        private static readonly HashSet<string> _exemptTowers = new HashSet<string>();
+        private static bool    _exemptHydrated;
+        private static string  _exemptKeyRaw = "";
+        private static KeyCode _exemptKey    = KeyCode.P;
+
         public static void Reset()
         {
             _nextPoll               = float.MinValue;
@@ -46,6 +60,8 @@ namespace EssentialProvisions.Features
             _raidEndedTotalDay      = null;
             _wasManagingGuardTowers = false;
             _stoodDownTowers.Clear();
+            _exemptTowers.Clear();
+            _exemptHydrated = false;
         }
 
         public static void OnUpdate()
@@ -53,16 +69,19 @@ namespace EssentialProvisions.Features
             if (!Config.EnablePennyPincher.Value) return;
             if (Plugin.IsForeignModLoaded("FFAutomation")) return;
 
-            float time = Time.time;
-            if (time < _nextPoll) return;
-            _nextPoll = time + PollIntervalSeconds;
-
             if (!GameManager.gameReadyToPlay) return;
             var gm = UnitySingleton<GameManager>.Instance;
             if (gm == null) return;
 
             try
             {
+                if (!_exemptHydrated) HydrateExemptions();
+                HandleExemptHotkey(gm);   // every frame — GetKeyDown is frame-scoped
+
+                float time = Time.time;
+                if (time < _nextPoll) return;
+                _nextPoll = time + PollIntervalSeconds;
+
                 UpdateRatCatchers(gm);
 
                 bool manageGuardTowers = Config.PennyPincherGuardTowers.Value;
@@ -151,6 +170,7 @@ namespace EssentialProvisions.Features
                 var tower = towers[i];
                 if (tower == null) continue;
                 var building = (Building)(object)tower;
+                if (_exemptTowers.Contains(PosKey(building))) continue; // player said hands off
                 bool wasEnabled = building.isWorkEnabled;
                 ToggleBuilding(gm, building, threatActive, cooldownElapsed);
                 // Record only the towers WE just stood down (was on → now off). EP never touches an
@@ -179,6 +199,136 @@ namespace EssentialProvisions.Features
                     building.SetWorkEnabled(true, true);
             }
             _stoodDownTowers.Clear();
+        }
+
+        // ----- Per-tower exemptions (Ctrl+<key> on a selected tower) -----
+
+        /// <summary>
+        /// Ctrl + configured key (default P) while a guard tower is selected toggles
+        /// that tower's exemption. Silent no-op when no guard tower is selected, so
+        /// the chord can coexist with other mods' bindings without noise.
+        /// </summary>
+        private static void HandleExemptHotkey(GameManager gm)
+        {
+            ResolveExemptKey();
+            if (_exemptKey == KeyCode.None) return;
+            if (!(Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))) return;
+            if (!Input.GetKeyDown(_exemptKey)) return;
+
+            var towers = gm.resourceManager?.guardTowersRO;
+            if (towers == null) return;
+            for (int i = 0; i < towers.Count; i++)
+            {
+                var tower = towers[i];
+                if (tower == null) continue;
+                var building = (Building)(object)tower;
+                if (!IsSelected(gm, building)) continue;
+                ToggleExemption(building);
+                return;
+            }
+        }
+
+        private static void ToggleExemption(Building building)
+        {
+            string key = PosKey(building);
+            if (_exemptTowers.Remove(key))
+            {
+                Common.Toast.Show("Guard tower re-enrolled in Penny Pincher.");
+                Plugin.Log.Msg($"[PennyPincher] Tower at {key} re-enrolled (auto-managed again).");
+            }
+            else
+            {
+                _exemptTowers.Add(key);
+                // If EP had stood this tower down, undo that now — exempt means EP never
+                // touches it, including leaving behind its own past stand-down.
+                if (_stoodDownTowers.Remove(building.GetInstanceID()) && !building.isWorkEnabled)
+                    building.SetWorkEnabled(true, true);
+                Common.Toast.Show("Guard tower exempt from Penny Pincher — it stays under your control.");
+                Plugin.Log.Msg($"[PennyPincher] Tower at {key} exempted.");
+            }
+            SaveExemptions();
+        }
+
+        /// <summary>Rounded world position — the stable per-save tower identity (buildings
+        /// never move; instance IDs are re-mapped every load).</summary>
+        private static string PosKey(Building b)
+        {
+            var p = b.transform.position;
+            return $"{Mathf.RoundToInt(p.x)}:{Mathf.RoundToInt(p.z)}";
+        }
+
+        private static void ResolveExemptKey()
+        {
+            string raw = Config.PennyPincherExemptKey.Value ?? "";
+            if (raw == _exemptKeyRaw) return;
+            _exemptKeyRaw = raw;
+            _exemptKey = Enum.TryParse(raw.Trim(), true, out KeyCode k) ? k : KeyCode.P;
+        }
+
+        // ----- Exemption persistence (plain text sidecar, one position key per line) -----
+
+        /// <summary>Same UserData derivation as MasteryStore.UserDir, leaf folder renamed.</summary>
+        private static string ExemptDir
+        {
+            get
+            {
+                var root = Directory.GetParent(Application.dataPath)?.FullName ?? Application.dataPath;
+                return Path.Combine(Path.Combine(root, "UserData"), "EP_PennyPincher");
+            }
+        }
+
+        private static void HydrateExemptions()
+        {
+            string save = SaveName();
+            if (string.IsNullOrEmpty(save)) return;   // save name not resolved yet — retry next frame
+            _exemptHydrated = true;
+            _exemptTowers.Clear();
+            try
+            {
+                var file = Path.Combine(ExemptDir, SafeFileName(save) + ".txt");
+                if (File.Exists(file))
+                    foreach (var line in File.ReadAllLines(file))
+                        if (!string.IsNullOrWhiteSpace(line)) _exemptTowers.Add(line.Trim());
+                if (_exemptTowers.Count > 0)
+                    Plugin.Log.Msg($"[PennyPincher] {_exemptTowers.Count} exempt guard tower(s) loaded for '{save}'.");
+            }
+            catch (Exception ex) { Plugin.Log.Warning($"[PennyPincher] Exemption load: {ex.Message}"); }
+        }
+
+        private static void SaveExemptions()
+        {
+            try
+            {
+                string save = SaveName();
+                if (string.IsNullOrEmpty(save)) return;
+                Directory.CreateDirectory(ExemptDir);
+                File.WriteAllLines(Path.Combine(ExemptDir, SafeFileName(save) + ".txt"), _exemptTowers);
+            }
+            catch (Exception ex) { Plugin.Log.Warning($"[PennyPincher] Exemption save: {ex.Message}"); }
+        }
+
+        // Verbatim from WorkplaceMastery.SaveName — keep the two in sync.
+        private static string SaveName()
+        {
+            try
+            {
+                var f = SaveManager.activeSaveFileName;
+                if (string.IsNullOrEmpty(f)) f = SaveManager.activeSettlementName;
+                if (string.IsNullOrEmpty(f)) return "";
+                if (f == "AutoSave 1" || f == "AutoSave 2")
+                    return string.IsNullOrEmpty(SaveManager.activeSettlementName) ? f : SaveManager.activeSettlementName;
+                return Path.GetFileNameWithoutExtension(f);
+            }
+            catch { return ""; }
+        }
+
+        // Verbatim from MasteryStore.SafeFileName.
+        private static string SafeFileName(string name)
+        {
+            var sb = new StringBuilder(name.Length);
+            foreach (var c in name)
+                sb.Append(Array.IndexOf(Path.GetInvalidFileNameChars(), c) >= 0 ? '_' : c);
+            return sb.ToString().Trim();
         }
 
         private static bool HasNonCampRaidTracker(GameManager gm)

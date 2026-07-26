@@ -213,7 +213,7 @@ namespace EssentialProvisions
                     order: 60));
             Reg(GroupVillagers, Config.PennyPincherGuardTowers,
                 NewMeta(label: "    Stand Down Guard Towers",
-                    tooltip: "Also stand down guard towers in peacetime (re-manned when raids approach). Turn off to keep guard towers fully under your control while still auto-managing rat catchers — turning it off immediately re-mans any towers it had stood down.",
+                    tooltip: "Also stand down guard towers in peacetime (re-manned when raids approach). Turn off to keep guard towers fully under your control while still auto-managing rat catchers — turning it off immediately re-mans any towers it had stood down. To exempt individual towers instead, select a tower and press Ctrl+P (toggles; persists per save).",
                     visibleWhen: () => Config.EnablePennyPincher.Value, order: 61));
 
             Reg(GroupVillagers, Config.EnableIdleHands,
@@ -352,6 +352,18 @@ namespace EssentialProvisions
                     label: "Blight Watch",
                     tooltip: "Pin diseased crop fields on the map until the disease is addressed.",
                     order: 20));
+
+            Reg(GroupAgriAlerts, Config.EnableHarvestWatch,
+                NewMeta(
+                    label: "Harvest Watch",
+                    tooltip: "Year-end report of how many fruit trees in each orchard went unharvested and rotted, with a trend and the building's worker count — your signal to add workers or shrink the work area. Feeds a live unharvested-tree count to the Arborist panel too.",
+                    order: 30));
+            Reg(GroupAgriAlerts, Config.HarvestWatchMinFruit,
+                NewMeta(
+                    label: "    Min Fruit to Flag",
+                    tooltip: "Minimum unharvested fruit on a tree before it's counted as neglected (year-end tally + live count).",
+                    min: 1, max: 50,
+                    visibleWhen: () => Config.EnableHarvestWatch.Value, order: 31));
 
             // ============================================================
             // === Planting Almanac ===
