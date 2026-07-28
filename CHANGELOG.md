@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.1 — 2026-07-28
+
+### Fixed
+- **Sub-second freezes when crop-disease alerts appeared or refreshed in large
+  towns.** FF's vanilla crop-alert widget raises its "lost crops to disease"
+  event mid-Init, so Blight Watch's event hook ran before its widget cache was
+  populated — and the cache-miss path fell back to a full-scene widget scan
+  (300–450ms on big maps) on every widget init. The miss path now caches the
+  in-hand widget directly (O(1)); the full sweep runs exactly once per map to
+  pick up widgets that predate enabling the feature. Same pinned disease
+  alerts, none of the hitching. (Found and verified with frame profiling on a
+  500-population town.)
+
 ## 1.5.0 — 2026-07-26
 
 ### Added

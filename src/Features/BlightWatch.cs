@@ -49,11 +49,13 @@ namespace EssentialProvisions.Features
             = new Dictionary<UISubWidgetCropFieldAlerts, WidgetCache>();
 
         private static float _nextPollTime;
+        private static bool _scannedOnce;
 
         public static void Reset()
         {
             _cache.Clear();
             _nextPollTime = 0f;
+            _scannedOnce = false;
         }
 
         public static void OnUpdate()
@@ -63,6 +65,16 @@ namespace EssentialProvisions.Features
 
             if (Time.time < _nextPollTime) return;
             _nextPollTime = Time.time + 2f;
+
+            // ONE full-scene sweep per map/enable to pick up widgets that
+            // existed before the feature started (their Init already ran).
+            // This is the only place the scene scan is allowed — see the
+            // perf note in RefreshDiseaseAlert.
+            if (!_scannedOnce)
+            {
+                _scannedOnce = true;
+                ScanAndRegisterWidgets();
+            }
 
             // Snapshot keys — RefreshDiseaseAlert may evict on exception.
             var widgets = _cache.Keys.ToList();
@@ -106,7 +118,15 @@ namespace EssentialProvisions.Features
         internal static void RefreshDiseaseAlert(UISubWidgetCropFieldAlerts widget)
         {
             if (widget == null) return;
-            if (!_cache.ContainsKey(widget)) ScanAndRegisterWidgets();
+            // Cache-miss → cache THIS widget directly (O(1)). This used to call
+            // ScanAndRegisterWidgets() — a full-scene FindObjectsOfType costing
+            // 300-450ms on large towns — and it fired on EVERY widget Init:
+            // FF's vanilla Init raises OnHasLostCropsToDiseaseChanged mid-body,
+            // so our Changed postfix ran BEFORE the Init postfix had cached the
+            // widget, guaranteeing a miss → scan → sub-second freeze whenever
+            // crop-alert widgets (re)built. (Found via FFPerfProbe, 2026-07-28.)
+            // We already hold the widget instance; there is nothing to search for.
+            if (!_cache.ContainsKey(widget)) CacheWidget(widget);
             if (!_cache.TryGetValue(widget, out var cached)) return;
             if (cached.DiseaseParent == null) return;
 
