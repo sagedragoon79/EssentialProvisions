@@ -2,7 +2,7 @@
 
 *A curated, opt-in quality-of-life bundle for Farthest Frontier.*
 
-Twenty features across four categories, every one OFF by default. Open the in-game settings panel, pick what you want, ignore the rest.
+Twenty-three features across five categories, every one OFF by default. Open the in-game settings panel, pick what you want, ignore the rest.
 
 ## Why a bundle?
 
@@ -17,6 +17,8 @@ If you've already got one of the source mods installed, EP detects it at startup
 - **Fast Forward** — Unlock game speeds above vanilla's 3x cap. Speeds 5x through 50x become available. Above 20x, hunter and combat AI may misbehave (you'll get a log warning). Toggle is live, no restart needed.
 - **Service Bounds** — Click any placed building to see its effect radius — water provision, market reach, desirability bonus, school enrollment range, work area. The same circle FF shows during placement, available on demand for buildings already built.
 - **Clearcutting** — Auto-flag trees, stones, and forageables for harvest in a radius around your Town Center. Skips danger zones near raiders, wolves, and bears. Triggers on toggle-on, new TC placement, or a one-shot "Re-Scan Now" button — never continuously pulses, so the decoration trees you plant don't get auto-tagged for chopping.
+- **Broad Plots** — Lift the size limits on Graveyards and Crop Fields. No 10x10 graveyard cap, no 12x12 / 12x24 crop field cap, and no "both sides must be at least 5 squares" rule — long thin plots like 4x10 become legal. Crop fields keep a total-cell ceiling, raised from vanilla's 288 to a value you set (default 1024).
+- **Roaming Hives** — Unpen the Apiary. No crop field needed to unlock it in the build menu (any other prerequisite still applies), and hives can be sited anywhere — including right on top of fruit trees in your orchard. Honey output is unchanged: production still follows the honey percentage at the site.
 
 ### Villager Improvements
 

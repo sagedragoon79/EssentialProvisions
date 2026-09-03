@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.6.0 — 2026-07-29
+
+### Added
+- **Broad Plots** (new feature, OFF by default) — lifts the size limits on Graveyards
+  and Crop Fields: no 10x10 graveyard cap, no 12x12 / 12x24 field cap, and no rule that
+  both sides must be at least 5 squares, so long thin plots like 4x10 are legal. Crop
+  fields keep a total-cell ceiling, raised from vanilla's 288 to a configurable value
+  (default 1024, live slider).
+- **Roaming Hives** (new feature, OFF by default) — unpens the Apiary. Removes the
+  crop-field requirement that keeps it locked in the build menu (other prerequisites
+  still apply), and lifts the placement rules that force hives onto honey-producing
+  ground and away from fruit trees — so a hive can sit right in the orchard. Honey
+  production math is untouched.
+
 ## 1.5.1 — 2026-07-28
 
 ### Fixed

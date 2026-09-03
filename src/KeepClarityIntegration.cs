@@ -130,6 +130,23 @@ namespace EssentialProvisions
                     tooltip: "Click any placed building to see its effect radius — water, desirability, market reach, school range, work area. Same circle FF shows during placement.",
                     order: 20));
 
+            Reg(GroupMisc, Config.EnableBroadPlots,
+                NewMeta(
+                    label: "Broad Plots",
+                    tooltip: "Lift the size limits on Graveyards and Crop Fields — no 10x10 graveyard cap, no 12x12 / 12x24 field cap, and no minimum width rule, so long thin plots like 4x10 are legal.",
+                    order: 26));
+            Reg(GroupMisc, Config.BroadPlotsMaxFieldCells,
+                NewMeta(label: "    Max Crop Field Cells",
+                    tooltip: "Total squares one crop field may cover across all expansions. Vanilla is 288. Larger fields mean more work per assigned farmer.",
+                    min: 288, max: 4096,
+                    visibleWhen: () => Config.EnableBroadPlots.Value, order: 27));
+
+            Reg(GroupMisc, Config.EnableRoamingHives,
+                NewMeta(
+                    label: "Roaming Hives",
+                    tooltip: "Unpen the Apiary. No crop field needed to unlock it in the build menu (other prerequisites still apply), and hives can be sited anywhere — including right on top of fruit trees. Honey output is unchanged: production still follows the honey percentage at the site, so a hive on barren ground builds but produces nothing.",
+                    order: 25));
+
             Reg(GroupMisc, Config.EnableClearcutting,
                 NewMeta(
                     label: "Clearcutting",

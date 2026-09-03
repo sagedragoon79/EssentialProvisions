@@ -49,6 +49,13 @@ namespace EssentialProvisions
         public static MelonPreferences_Entry<bool> EnableHarvestWatch   { get; private set; } = null!;
         public static MelonPreferences_Entry<int>  HarvestWatchMinFruit { get; private set; } = null!;
 
+        // ----- Roaming Hives (original EP feature: drop the Apiary honey-ground placement rule) -----
+        public static MelonPreferences_Entry<bool> EnableRoamingHives { get; private set; } = null!;
+
+        // ----- Broad Plots (original EP feature: uncap graveyard + crop field sizes) -----
+        public static MelonPreferences_Entry<bool> EnableBroadPlots         { get; private set; } = null!;
+        public static MelonPreferences_Entry<int>  BroadPlotsMaxFieldCells  { get; private set; } = null!;
+
         // ===== Visual Aids bucket =====
 
         // ----- Service Bounds (folded from FFQoL by idontcare) -----
@@ -186,6 +193,23 @@ namespace EssentialProvisions
                 "HarvestWatchMinFruit", 3,
                 display_name: "Harvest Watch: Min Fruit to Flag",
                 description: "Minimum unharvested fruit on a tree before Harvest Watch counts it as neglected — used for both the year-end rot tally and the live count. Raise it to ignore trees with only a little fruit left. Range 1–50.");
+
+            // ----- Broad Plots -----
+            EnableBroadPlots = _root.CreateEntry(
+                "EnableBroadPlots", false,
+                display_name: "Broad Plots",
+                description: "Lift the size limits on Graveyards and Crop Fields. Removes the 10x10 graveyard cap and the 12x12 / 12x24 crop field cap, and drops the rule that both sides must be at least 5 squares — so long thin plots like 4x10 become legal. Crop fields keep a total-cell ceiling, raised from vanilla 288 to whatever you set below.");
+
+            BroadPlotsMaxFieldCells = _root.CreateEntry(
+                "BroadPlotsMaxFieldCells", 1024,
+                display_name: "    Max Crop Field Cells",
+                description: "Total squares a single crop field may cover, counting every expansion. Vanilla is 288 (12x24). Raising this lets one field grow larger; very large fields mean more work for the farmers assigned to them and more simulation per field. Range 288-4096.");
+
+            // ----- Roaming Hives -----
+            EnableRoamingHives = _root.CreateEntry(
+                "EnableRoamingHives", false,
+                display_name: "Roaming Hives",
+                description: "Unpen the Apiary. Removes the crop-field requirement that keeps the Apiary locked in the build menu (any other prerequisite, such as a tech or town-center tier, still applies), and lifts the placement rules that force hives onto honey-producing ground and away from fruit trees — so you can site a hive right in the orchard. Honey output math is untouched: production still follows the honey percentage at the site, so a hive on barren ground will build but produce nothing.");
 
             // ----- Service Bounds -----
             EnableServiceBounds = _root.CreateEntry(

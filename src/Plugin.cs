@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.5.1", "sagedragoon79")]
+[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.6.0", "sagedragoon79")]
 [assembly: MelonGame("Crate Entertainment", "Farthest Frontier")]
 
 namespace EssentialProvisions
@@ -117,6 +117,8 @@ namespace EssentialProvisions
             Features.WorkplaceMastery.Reset();
             Features.RabiesTreatable.Reset();
             Features.HarvestWatch.Reset();
+            Features.RoamingHives.Reset();
+            Features.BroadPlots.Reset();
             Common.DiseaseRosterDump.Reset();
         }
 
@@ -141,6 +143,7 @@ namespace EssentialProvisions
             Features.WorkplaceMastery.OnUpdate();
             Features.RabiesTreatable.OnUpdate();
             Features.HarvestWatch.OnUpdate();
+            Features.BroadPlots.OnUpdate();
             Common.DiseaseRosterDump.DumpOnce();
         }
 
