@@ -24,7 +24,12 @@
 //     reserve ≈ target.
 //   - Apply via StorageQuotaHandler.SetMinQuotaForItem on:
 //       Food items → granaries + root cellars + storehouses (incl. T2 variants)
-//       Non-food items → storehouses only
+//       Non-food items → storehouses + storage depots
+//     ...but only on storages that ACCEPT the item and still have it TICKED
+//     (2026-09-28). A minimum on an unlisted item pulls stock in that the
+//     storage window can't show controls for, and a minimum on an unticked
+//     item raises the player's hidden max-0 and quietly overrides the untick.
+//     Each apply also clears any such stray minimum EP left behind.
 //     Trading posts are deliberately excluded — they should not hoard reserve.
 //   - On disable / reset, clear only the (storage, ItemID) quotas EP wrote.
 
@@ -254,15 +259,17 @@ namespace EssentialProvisions.Features
 
             int reserveMonths = Math.Max(1, Config.ConsumableReserveMonths.Value);
             float headroom = 1f + Math.Max(0, Math.Min(50, Config.ConsumableHeadroomPercent.Value)) / 100f;
-            int foodStorageCount    = CollectFoodStorages(rm).Count;
-            int generalStorageCount = CollectGeneralStorages(rm).Count;
+            var foodStorages    = CollectFoodStorages(rm);
+            var generalStorages = CollectGeneralStorages(rm);
 
             foreach (var kv in _trackers)
             {
                 var tracker = kv.Value;
                 float rate = tracker.AverageDailyRate();
                 int target = (int)Math.Ceiling(rate * 30f * reserveMonths * headroom);
-                int count = FoodItems.Contains(kv.Key) ? foodStorageCount : generalStorageCount;
+                int count = 0;
+                foreach (var storage in FoodItems.Contains(kv.Key) ? foodStorages : generalStorages)
+                    if (storage != null && AcceptsAndAllows(storage, kv.Key)) count++;
                 int perStorage = count > 0 ? (int)Math.Ceiling((double)target / count) : 0;
                 Plugin.Log.Msg($"[ConsumableControl][diag] {kv.Key}: rate {rate:0.00}/day ({tracker.Days}d data), reserve target {target} ({reserveMonths}mo) → {perStorage}/storage × {count} storage(s).");
             }
@@ -285,10 +292,24 @@ namespace EssentialProvisions.Features
 
             int writtenCount = 0;
             int skippedCount = 0;
+            int clearedCount = 0;
+            var targets = new List<StorageBuilding>();
             foreach (var kv in _trackers)
             {
                 var itemID = kv.Key;
                 var tracker = kv.Value;
+
+                // Split candidates first, before the data checks, so stray
+                // minimums get cleared even for an item with no usage yet.
+                var candidates = FoodItems.Contains(itemID) ? foodStorages : generalStorages;
+                targets.Clear();
+                foreach (var candidate in candidates)
+                {
+                    if (candidate == null) continue;
+                    if (AcceptsAndAllows(candidate, itemID)) targets.Add(candidate);
+                    else if (ClearStrayMinimum(candidate, itemID)) clearedCount++;
+                }
+
                 if (tracker.Days == 0) continue;
                 float dailyRate = tracker.AverageDailyRate();
                 if (dailyRate <= 0f) continue;
@@ -296,7 +317,6 @@ namespace EssentialProvisions.Features
                 int totalTarget = (int)Math.Ceiling(dailyRate * 30f * reserveMonths * headroom);
                 if (totalTarget <= 0) continue;
 
-                var targets = FoodItems.Contains(itemID) ? foodStorages : generalStorages;
                 if (targets.Count == 0) continue;
 
                 int perStorage = (int)Math.Ceiling((double)totalTarget / targets.Count);
@@ -332,8 +352,60 @@ namespace EssentialProvisions.Features
                 }
             }
 
-            if (writtenCount > 0 || skippedCount > 0)
-                Plugin.Log.Msg($"[ConsumableControl] {cause} apply: {writtenCount} quota update(s), {skippedCount} unchanged-skipped, across {foodStorages.Count} food + {generalStorages.Count} general storage(s).");
+            if (writtenCount > 0 || skippedCount > 0 || clearedCount > 0)
+                Plugin.Log.Msg($"[ConsumableControl] {cause} apply: {writtenCount} quota update(s), {skippedCount} unchanged-skipped, {clearedCount} stray minimum(s) cleared, across {foodStorages.Count} food + {generalStorages.Count} general storage(s).");
+        }
+
+        // ----- Eligibility -----
+
+        /// <summary>
+        /// True when the storage type lists the item (only listed items get an
+        /// allow checkbox and min/max controls in the storage window) AND the
+        /// player still has it ticked.
+        /// </summary>
+        private static bool AcceptsAndAllows(StorageBuilding storage, ItemID itemID)
+        {
+            return ContainsItem(storage.allowableItemsRO, itemID)
+                && ContainsItem(storage.userDefinedAllowableItemsRO, itemID);
+        }
+
+        private static bool ContainsItem(IList<Item>? items, ItemID itemID)
+        {
+            if (items == null) return false;
+            for (int i = 0; i < items.Count; i++)
+                if (items[i] != null && items[i].itemID == itemID) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Removes a minimum EP must not keep on a storage that doesn't accept
+        /// or allow the item. Any such minimum is EP's: the storage window
+        /// offers no quota controls for unlisted items, and unticking an item
+        /// sets its max to 0, which also zeroes the min
+        /// (StorageQuotaHandler.SetMaxQuotaForItem clamps min to max). For an
+        /// unticked item, restoring max 0 clears the min AND puts the player's
+        /// untick back, since EP's minimum had raised that max.
+        /// </summary>
+        private static bool ClearStrayMinimum(StorageBuilding storage, ItemID itemID)
+        {
+            var qh = storage.quotaHandler;
+            if (qh == null || !qh.GetMinQuotaForItem(itemID, out _)) return false;
+            try
+            {
+                if (ContainsItem(storage.allowableItemsRO, itemID))
+                    qh.SetMaxQuotaForItem(itemID, 0);      // accepted but unticked: restore the untick
+                else
+                    qh.ClearMinQuotaForItem(itemID);       // not accepted: just drop the minimum
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Warning($"[ConsumableControl] Clearing stray {itemID} minimum on {storage.GetType().Name} failed: {ex.Message}");
+                return false;
+            }
+            var key = new StorageItemKey(storage.GetInstanceID(), itemID);
+            _writtenQuotas.Remove(key);
+            _lastWrittenValue.Remove(key);
+            return true;
         }
 
         // ----- Storage collection -----
@@ -352,12 +424,15 @@ namespace EssentialProvisions.Features
             return list;
         }
 
-        /// <summary>Storehouses only — for non-food items (firewood, clothing, etc).</summary>
+        /// <summary>Storehouses + Storage Depots — for non-food items (firewood, clothing, etc).
+        /// Broad Shelves adds Firewood and Coal to both, so the fuel reserve has a home.</summary>
         private static List<StorageBuilding> CollectGeneralStorages(ResourceManager rm)
         {
             var list = new List<StorageBuilding>();
             if (rm.storehousesRO != null)
                 foreach (var s in rm.storehousesRO) if (s != null) list.Add(s);
+            if (rm.storageDepotsRO != null)
+                foreach (var d in rm.storageDepotsRO) if (d != null) list.Add(d);
             return list;
         }
 
@@ -382,6 +457,9 @@ namespace EssentialProvisions.Features
                 if (rm.storehousesRO != null)
                     foreach (var s in rm.storehousesRO)
                         if (s?.quotaHandler != null) lookup[s.GetInstanceID()] = s.quotaHandler;
+                if (rm.storageDepotsRO != null)
+                    foreach (var d in rm.storageDepotsRO)
+                        if (d?.quotaHandler != null) lookup[d.GetInstanceID()] = d.quotaHandler;
 
                 foreach (var key in _writtenQuotas)
                 {

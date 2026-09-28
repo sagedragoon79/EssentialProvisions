@@ -136,6 +136,7 @@ namespace EssentialProvisions
             Features.PennyPincher.OnUpdate();
             Features.Clearcutting.OnUpdate();
             Features.EfficientLabor.OnUpdate();
+            Features.BroadShelves.OnUpdate();          // one-time fuel tick; before Consumable Control's first apply
             Features.ConsumableControl.OnUpdate();
             Features.SurplusSelling.OnUpdate();
             Features.FastForward.OnUpdate();

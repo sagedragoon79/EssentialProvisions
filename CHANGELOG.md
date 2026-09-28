@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Coal and Firewood in Storehouses had no controls.** Consumable Control keeps
+  its heating-fuel reserve in Storehouses on purpose, but Storehouses didn't list
+  fuel as an accepted item, so the storage window showed Coal and Firewood as bare
+  counts with no allow checkbox and no min/max window. Broad Shelves now adds Coal
+  and Firewood to Storehouses and Storage Depots, and ticks them on older saves
+  unless you had unticked them yourself.
+- **Consumable Control set minimums where it shouldn't.** It now sets a reserve only
+  on storages that accept the item and still have it ticked, and it includes Storage
+  Depots. It also clears the stray minimums it left before: on storages that don't
+  accept the item, and on items you had unticked, where its minimum had quietly
+  overridden your untick. Those storages now empty the item out, as you asked.
+
 ## 1.6.0 — 2026-07-29
 
 ### Added
