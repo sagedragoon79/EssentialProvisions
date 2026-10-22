@@ -1,7 +1,7 @@
 # Give every job a Workplace Mastery benefit
 
-> **STATUS, October 15, 2026: built, Debug-staged, uncommitted, awaiting the user's test.**
-> Don't bump the version, commit, or release until the user tests and asks.
+> **STATUS: SHIPPED in v1.7.0 (October 21, 2026), commit 48b0a76, user-tested.**
+> Below is the record of what was built and why.
 >
 > **Decisions the user made:** the recommended caps (production 25%, service and care 10%,
 > combat 10% damage and 10% damage reduction, trade 5%); combat behind its own sub-toggle,
