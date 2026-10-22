@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.6.0", "sagedragoon79")]
+[assembly: MelonInfo(typeof(EssentialProvisions.Plugin), "Essential Provisions", "1.7.0", "sagedragoon79")]
 [assembly: MelonGame("Crate Entertainment", "Farthest Frontier")]
 
 namespace EssentialProvisions
@@ -41,6 +41,7 @@ namespace EssentialProvisions
             // Features with one-time post-Config setup hooks.
             Features.ProjectPrep.Initialize();
             Features.WorkplaceMastery.Initialize();
+            Features.WorkplaceMasteryEffects.Initialize();   // per-job effects, each patched under its own try/catch
             Features.RabiesTreatable.Initialize();   // one-time cure-roll diagnostic patches
             Features.HarvestWatch.Initialize();      // one-time fruit-wipe tally patch
 
@@ -96,6 +97,9 @@ namespace EssentialProvisions
         /// </summary>
         public override void OnSceneWasInitialized(int buildIndex, string sceneName)
         {
+            // First: a new scene may be a different town, so drop the latched save identity
+            // before any feature can read it.
+            Common.SaveIdentity.Reset();
             Features.LaborShortage.Reset();
             Features.LongTravels.Reset();
             Features.IdleHands.Reset();
@@ -115,6 +119,7 @@ namespace EssentialProvisions
             Features.PlantingAlmanac.Reset();
             Features.LearnedHands.Reset();
             Features.WorkplaceMastery.Reset();
+            Features.WorkplaceMasteryEffects.Reset();
             Features.RabiesTreatable.Reset();
             Features.HarvestWatch.Reset();
             Features.RoamingHives.Reset();

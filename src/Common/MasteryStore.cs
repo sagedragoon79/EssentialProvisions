@@ -9,8 +9,9 @@
 // (re-mapped every load) and a prefab-scoped guid; villagerName is mutable. So we can't
 // piggyback the .sav, and we key our own file by a COMPOSITE synthetic key (see
 // WorkplaceMastery.CompositeKey) derived from the one per-villager ABSOLUTE date FF does
-// persist — the birthday. The file is keyed per save (UserData/EP_VillagerMastery/<save>.json)
-// because tenure is per-town history, unlike Planting Almanac's global library.
+// persist — the birthday. The file is keyed per TOWN (UserData/EP_VillagerMastery/<town
+// folder>.json, see Common/SaveIdentity.cs) because tenure is per-town history, unlike
+// Planting Almanac's global library.
 
 using System;
 using System.Collections.Generic;
@@ -58,6 +59,48 @@ namespace EssentialProvisions.Common
             }
         }
 
+        private static string PathFor(string saveName) =>
+            Path.Combine(UserDir, SafeFileName(saveName) + ".json");
+
+        /// <summary>True if a sidecar exists for this name. Never throws.</summary>
+        internal static bool Exists(string saveName)
+        {
+            try { return !string.IsNullOrEmpty(saveName) && File.Exists(PathFor(saveName)); }
+            catch { return false; }
+        }
+
+        /// <summary>Total committed days across all occupations.</summary>
+        internal static int CommittedDays(MasteryRecord rec)
+        {
+            int total = 0;
+            if (rec?.Days != null)
+                foreach (var d in rec.Days.Values) total += d;
+            return total;
+        }
+
+        /// <summary>
+        /// Merge several sidecars into one map, keeping, per villager key, the record with
+        /// the most committed days. Tenure only grows within a town's timeline, so the
+        /// largest record is the most recent one. Used once per town to migrate files
+        /// written before the town-folder key (October 2026). Names of the files actually found
+        /// are appended to <paramref name="usedNames"/>.
+        /// </summary>
+        internal static Dictionary<string, MasteryRecord> LoadMerged(IEnumerable<string> saveNames, List<string> usedNames)
+        {
+            var merged = new Dictionary<string, MasteryRecord>();
+            foreach (var name in saveNames)
+            {
+                if (!Exists(name)) continue;
+                usedNames?.Add(name);
+                foreach (var kv in Load(name))
+                {
+                    if (!merged.TryGetValue(kv.Key, out var have) || CommittedDays(kv.Value) > CommittedDays(have))
+                        merged[kv.Key] = kv.Value;
+                }
+            }
+            return merged;
+        }
+
         /// <summary>Load a save's sidecar into a composite-key → record map. Returns an
         /// empty map (never null, never throws) on a missing or corrupt file.</summary>
         internal static Dictionary<string, MasteryRecord> Load(string saveName)
@@ -66,7 +109,7 @@ namespace EssentialProvisions.Common
             try
             {
                 if (string.IsNullOrEmpty(saveName)) return result;
-                var file = Path.Combine(UserDir, SafeFileName(saveName) + ".json");
+                var file = PathFor(saveName);
                 if (!File.Exists(file)) return result;
 
                 var dto = JsonConvert.DeserializeObject<MasteryFile>(File.ReadAllText(file));
@@ -106,7 +149,7 @@ namespace EssentialProvisions.Common
                         e.days.Add(new OccDays { occ = d.Key, total = d.Value });
                     dto.villagers.Add(e);
                 }
-                File.WriteAllText(Path.Combine(UserDir, SafeFileName(saveName) + ".json"),
+                File.WriteAllText(PathFor(saveName),
                     JsonConvert.SerializeObject(dto, Formatting.Indented));
             }
             catch (Exception ex) { Plugin.Log.Warning($"[WorkplaceMastery] Save: {ex.Message}"); }

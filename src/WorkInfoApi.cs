@@ -95,6 +95,34 @@ namespace EssentialProvisions
             catch { return new float[0]; }
         }
 
+        /// <summary>What Workplace Mastery does for the villager's CURRENT job, as short English
+        /// text, e.g. "Teaches 6% faster", "Hits 4% harder, takes 4% less damage", or
+        /// "Works 12% faster" for crafting and gathering jobs. "" when the feature is off, the
+        /// job has no effect (or its effect is switched off), or tenure hasn't earned a whole
+        /// percent yet. Added October 2026; prefer it over <see cref="GetMasteryBonusPercent"/>
+        /// for display, because that one reports the work-rate scale for every job.</summary>
+        public static string GetMasteryEffectText(Villager v)
+        {
+            if (v == null) return "";
+            try
+            {
+                WorkplaceMasteryEffects.EffectFor(v, out string text);
+                return text ?? "";
+            }
+            catch { return ""; }
+        }
+
+        /// <summary>The size of that effect in percentage points (6f == 6%), on the job's own
+        /// scale: up to 25 for production jobs, 10 for service and combat jobs, 5 for traders.
+        /// Same conditions as <see cref="GetMasteryEffectText"/>; 0 when there's no effect.
+        /// Added October 2026.</summary>
+        public static float GetMasteryEffectPercent(Villager v)
+        {
+            if (v == null) return 0f;
+            try { return WorkplaceMasteryEffects.EffectFor(v, out _); }
+            catch { return 0f; }
+        }
+
         /// <summary>DEPRECATED (kept for back-compat until KC migrates off it): compact one-line
         /// summary like "+10% edu · +8% mastery", or "" if none apply. New callers should use the
         /// numeric getters above.</summary>

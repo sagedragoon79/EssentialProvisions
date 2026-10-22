@@ -253,8 +253,12 @@ namespace EssentialProvisions
             Reg(GroupVillagers, Config.EnableWorkplaceMastery,
                 NewMeta(
                     label: "Workplace Mastery",
-                    tooltip: "Villagers work faster the longer they hold the same job — gathering, field work, AND crafting. +1%/yr of tenure, capped at +25% (25 yr). Stacks on Learned Hands. Tenure is per-occupation, persists per-save; existing villagers start fresh. Adds a Mastery readout to the villager picker. On/off — no slider.",
+                    tooltip: "Every job improves with tenure, up to a cap at 25 years. Crafting, gathering, field work, building, mining, and fishing: up to 25% faster. Healers, teachers, scholars, priests, publicans, librarians, grocers, guildmasters, rat catchers, and groomers: up to 10% stronger. Traders: up to 5% better prices, paused while Merchant's Gambit is on. Stacks with Learned Hands. Tenure is per job and saved per town; existing villagers start fresh. On/off, no slider.",
                     order: 90));
+            Reg(GroupVillagers, Config.WorkplaceMasteryCombat,
+                NewMeta(label: "    Mastery in Combat",
+                    tooltip: "Soldiers, guards, and hunters hit up to 10% harder with tenure, and soldiers and guards take up to 10% less damage. Guard towers hit harder with experienced guards inside. Turn off to keep combat vanilla; every other job keeps its effect.",
+                    visibleWhen: () => Config.EnableWorkplaceMastery.Value, order: 91));
 
             Reg(GroupVillagers, Config.EnableRabiesTreatable,
                 NewMeta(

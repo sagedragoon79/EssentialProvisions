@@ -46,10 +46,15 @@ namespace EssentialProvisions.Features
         // Player-exempted towers: Penny Pincher never touches these (no peacetime stand-down,
         // no threat re-man). Keyed by rounded world position — buildings never move, and FF
         // instance IDs are re-mapped every load, so position is the stable per-save identity
-        // (same reasoning as WorkplaceMastery's composite-key sidecar). Persisted per save in
-        // UserData/EP_PennyPincher/<save>.txt, one key per line.
+        // (same reasoning as WorkplaceMastery's composite-key sidecar). Persisted per TOWN in
+        // UserData/EP_PennyPincher/<town folder>.txt, one key per line (Common/SaveIdentity.cs).
         private static readonly HashSet<string> _exemptTowers = new HashSet<string>();
         private static bool    _exemptHydrated;
+        // Town whose exemption file has been read; "" until the town has a save folder.
+        private static string  _exemptBoundKey = "";
+        // A tower was toggled before the town's file could be read; write once it is.
+        private static bool    _exemptDirty;
+        private static bool    _exemptBindErrorLogged;
         private static string  _exemptKeyRaw = "";
         private static KeyCode _exemptKey    = KeyCode.P;
 
@@ -62,6 +67,9 @@ namespace EssentialProvisions.Features
             _stoodDownTowers.Clear();
             _exemptTowers.Clear();
             _exemptHydrated = false;
+            _exemptBoundKey = "";
+            _exemptDirty = false;
+            _exemptBindErrorLogged = false;
         }
 
         public static void OnUpdate()
@@ -76,6 +84,7 @@ namespace EssentialProvisions.Features
             try
             {
                 if (!_exemptHydrated) HydrateExemptions();
+                else if (_exemptBoundKey.Length == 0) TryBindExemptions();   // a few string reads until bound
                 HandleExemptHotkey(gm);   // every frame — GetKeyDown is frame-scoped
 
                 float time = Time.time;
@@ -277,49 +286,95 @@ namespace EssentialProvisions.Features
             }
         }
 
+        private static string ExemptFile(string name) => Path.Combine(ExemptDir, SafeFileName(name) + ".txt");
+
         private static void HydrateExemptions()
         {
-            string save = SaveName();
-            if (string.IsNullOrEmpty(save)) return;   // save name not resolved yet — retry next frame
             _exemptHydrated = true;
             _exemptTowers.Clear();
+            _exemptBoundKey = "";
+            TryBindExemptions();
+        }
+
+        // Read the town's exemptions and merge them into memory. A new town has no save
+        // folder until its first save, so until then toggles live in memory; OnUpdate retries
+        // this until the folder appears, then anything toggled in the meantime is written.
+        private static void TryBindExemptions()
+        {
+            string town = Common.SaveIdentity.TownKey();
+            if (town.Length == 0) return;
             try
             {
-                var file = Path.Combine(ExemptDir, SafeFileName(save) + ".txt");
-                if (File.Exists(file))
-                    foreach (var line in File.ReadAllLines(file))
-                        if (!string.IsNullOrWhiteSpace(line)) _exemptTowers.Add(line.Trim());
-                if (_exemptTowers.Count > 0)
-                    Plugin.Log.Msg($"[PennyPincher] {_exemptTowers.Count} exempt guard tower(s) loaded for '{save}'.");
+                var migratedFrom = new List<string>();
+                var fromDisk = new HashSet<string>();
+                if (File.Exists(ExemptFile(town)))
+                {
+                    ReadExemptionsInto(ExemptFile(town), fromDisk);
+                }
+                else
+                {
+                    // One-time migration from the names used before the town-folder key. The shared
+                    // "AutoSave N" name is skipped: a tower position from another town could
+                    // match one here and silently exempt it.
+                    foreach (var legacy in Common.SaveIdentity.LegacyKeys(includeSharedAutosave: false))
+                    {
+                        if (!File.Exists(ExemptFile(legacy))) continue;
+                        ReadExemptionsInto(ExemptFile(legacy), fromDisk);
+                        migratedFrom.Add(legacy);
+                    }
+                }
+
+                _exemptTowers.UnionWith(fromDisk);
+                _exemptBoundKey = town;
+                if (fromDisk.Count > 0)
+                    Plugin.Log.Msg(migratedFrom.Count > 0
+                        ? $"[PennyPincher] {fromDisk.Count} exempt guard tower(s) migrated to town '{town}' from {string.Join(", ", migratedFrom.ToArray())}."
+                        : $"[PennyPincher] {fromDisk.Count} exempt guard tower(s) loaded for town '{town}'.");
+
+                if (_exemptDirty || migratedFrom.Count > 0)
+                {
+                    _exemptDirty = false;
+                    WriteExemptions(town);
+                }
             }
-            catch (Exception ex) { Plugin.Log.Warning($"[PennyPincher] Exemption load: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                // Retried every frame while unbound, so log only the first failure.
+                if (!_exemptBindErrorLogged)
+                {
+                    _exemptBindErrorLogged = true;
+                    Plugin.Log.Warning($"[PennyPincher] Exemption load: {ex.Message}");
+                }
+            }
+        }
+
+        private static void ReadExemptionsInto(string file, HashSet<string> into)
+        {
+            foreach (var line in File.ReadAllLines(file))
+                if (!string.IsNullOrWhiteSpace(line)) into.Add(line.Trim());
         }
 
         private static void SaveExemptions()
         {
-            try
+            // OnUpdate binds before handling the hotkey, so being unbound here means the town
+            // has no folder yet or its file couldn't be read. Either way, never write blind.
+            string town = Common.SaveIdentity.TownKey();
+            if (town.Length == 0 || _exemptBoundKey.Length == 0)
             {
-                string save = SaveName();
-                if (string.IsNullOrEmpty(save)) return;
-                Directory.CreateDirectory(ExemptDir);
-                File.WriteAllLines(Path.Combine(ExemptDir, SafeFileName(save) + ".txt"), _exemptTowers);
+                _exemptDirty = true;
+                return;
             }
-            catch (Exception ex) { Plugin.Log.Warning($"[PennyPincher] Exemption save: {ex.Message}"); }
+            WriteExemptions(town);
         }
 
-        // Verbatim from WorkplaceMastery.SaveName — keep the two in sync.
-        private static string SaveName()
+        private static void WriteExemptions(string town)
         {
             try
             {
-                var f = SaveManager.activeSaveFileName;
-                if (string.IsNullOrEmpty(f)) f = SaveManager.activeSettlementName;
-                if (string.IsNullOrEmpty(f)) return "";
-                if (f == "AutoSave 1" || f == "AutoSave 2")
-                    return string.IsNullOrEmpty(SaveManager.activeSettlementName) ? f : SaveManager.activeSettlementName;
-                return Path.GetFileNameWithoutExtension(f);
+                Directory.CreateDirectory(ExemptDir);
+                File.WriteAllLines(ExemptFile(town), _exemptTowers);
             }
-            catch { return ""; }
+            catch (Exception ex) { Plugin.Log.Warning($"[PennyPincher] Exemption save: {ex.Message}"); }
         }
 
         // Verbatim from MasteryStore.SafeFileName.

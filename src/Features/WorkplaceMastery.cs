@@ -1,21 +1,27 @@
 // Workplace Mastery — villagers work a little faster the longer they hold the same
-// job. Default +2% per in-game year of tenure, capped at +10% (5 years). Tunable
-// 1-3%/year and a 0-25 year cap. Original EP feature, OFF by default.
+// job: +1% per in-game year of tenure, capped at +25% after 25 years
+// (WorkOutputPerYear, TenureCapYears). On/off only, no sliders; rebalance by changing
+// the constants. Original EP feature, OFF by default.
 //
 // HOW IT STACKS: a SECOND Harmony postfix on the same chokepoint Learned Hands uses —
 // HappinessManager.GetWorkRateMultiplier(Villager) (the 1-arg overload). Both postfixes
 // multiply __result, and multiplication commutes, so order is irrelevant:
 // final = base × (1 + education) × (1 + tenure).
 //
-// COVERAGE (verified against the decompile, _research/mastery-coverage-map.md): the
-// work-rate multiplier is consumed in exactly ONE work tick —
-// ReservableItemStorage.DetachItemsFromReservation — which gates resource EXTRACTION
-// (wood/mining/foraging), field TILLING/PLANTING/MAINTENANCE, clearing/repair/explore/
-// excavate/salvage, and hunter BUTCHERING. It does NOT reach MANUFACTURING throughput
-// (the old "covers manufacturing via the 4-arg delegation" claim was wrong — the 4-arg
-// only paints the work-rate icon). Crafting is covered separately by ManufacturePatch
-// below (a postfix on ManufactureWorkOrder.AdjustAddedWorkUnits) which applies BOTH the
-// education and tenure terms so educated/veteran crafters finally speed up too.
+// COVERAGE (re-verified 2026-10-15 against the June 10, 2026 decompile; the per-job
+// table is in _handoffs/2026-10-15_mastery-for-every-job.md): the work-rate multiplier is
+// consumed in exactly ONE work tick — ReservableItemStorage.DetachItemsFromReservation,
+// and only for items with a detach cost. That covers laborer and work-camp gathering
+// (felling, rocks, clearing, wild forage, clay, exploring, excavating, salvaging,
+// burying), foraging, field TILLING/PLANTING/UPKEEP, apiary honey and wax, fruit-tree
+// planting and felling, and hunter BUTCHERING. It does NOT cover hauling, crop harvest,
+// fruit picking, MINING (ore is a headcount rate in Mine.UpdateOreProduction), or
+// CONSTRUCTION and REPAIRS (both detach with ignoreDetachmentCosts: true). It never
+// reached MANUFACTURING either (the 4-arg overload only paints the work-rate icon), so
+// crafting is covered separately by ManufacturePatch below (a postfix on
+// ManufactureWorkOrder.AdjustAddedWorkUnits), which applies BOTH the education and
+// tenure terms. The 16 jobs neither hook reaches (builders, miners, fishermen, service and
+// combat jobs, traders) each get their own effect in WorkplaceMasteryEffects.cs.
 //
 // TENURE MODEL: per villager we keep {occupation -> committed days} plus the currently-
 // open tenure (occupation + the absolute in-game day it began). "Open" days are derived
@@ -31,9 +37,13 @@
 // from OnUpdate (mirroring ConsumableControl) so it arms once the game is live and tears
 // down cleanly when the feature is toggled off.
 //
-// PERSISTENCE: a per-save JSON sidecar (Common/MasteryStore.cs), loaded on
-// GameFinishedLoadingEvent and written on StartSaveGameEvent (the only save-side hook FF
-// raises). FF has no stable per-villager id, so the sidecar is keyed by a composite of
+// PERSISTENCE: a per-TOWN JSON sidecar (Common/MasteryStore.cs), named after the town's
+// save folder (Common/SaveIdentity.cs explains why the raw save name can't be used),
+// loaded on GameFinishedLoadingEvent and written on StartSaveGameEvent (the only save-side
+// hook FF raises). A new town has no folder until its first save, and that save's event
+// fires BEFORE FF creates the folder, so until then tenure stays in memory: TryLateBind
+// ties it to the file once the folder name appears and writes any save that came first.
+// FF has no stable per-villager id, so the sidecar is keyed by a composite of
 // the one absolute per-villager date FF persists (birthday) + immutable sex/joinReason +
 // name. RETROACTIVITY: existing villagers' job tenure can't be reconstructed (FF stores
 // no job-start date), so without a sidecar everyone starts at 0 and accrues going forward.
@@ -87,7 +97,13 @@ namespace EssentialProvisions.Features
 
         private static bool _subscribed;
         private static bool _wasEnabled;
-        private static bool _hydrated;            // sidecar loaded for the current save
+        private static bool _hydrated;            // in-memory tenure built for the current session
+        // Town whose sidecar this session's tenure is tied to; "" until the town has a save
+        // folder (a new town before its first save, or a name that resolved late).
+        private static string _boundTownKey = "";
+        // A save fired while the town had no folder yet; write as soon as it does.
+        private static bool _pendingWrite;
+        private static bool _lateBindErrorLogged;
         private static bool _firstApplicationLogged;
         private static bool _workRateErrorLogged;
         private static bool _mfgFirstLogged;
@@ -99,6 +115,9 @@ namespace EssentialProvisions.Features
             _byInstance.Clear();
             _wasEnabled = false;
             _hydrated = false;
+            _boundTownKey = "";
+            _pendingWrite = false;
+            _lateBindErrorLogged = false;
             _firstApplicationLogged = false;
             _workRateErrorLogged = false;
             _mfgFirstLogged = false;
@@ -162,6 +181,12 @@ namespace EssentialProvisions.Features
                 if (!_hydrated) Hydrate();
                 else Resync();
             }
+
+            // Cheap while unbound (a few string reads), and a no-op once bound.
+            if (_hydrated && _boundTownKey.Length == 0) TryLateBind();
+
+            // Per-job effects cache tenure per day; drop it when the day changes.
+            WorkplaceMasteryEffects.Tick(AbsDay());
         }
 
         private static void UnsubscribeIfSubscribed()
@@ -189,11 +214,12 @@ namespace EssentialProvisions.Features
             try
             {
                 _byInstance.Clear();
+                _boundTownKey = "";
                 var rm = UnitySingleton<GameManager>.Instance?.resourceManager;
                 if (rm?.villagersRO == null) { _hydrated = true; return; }
 
-                string save = SaveName();
-                var loaded = MasteryStore.Load(save);
+                string town = SaveIdentity.TownKey();
+                var loaded = town.Length > 0 ? LoadForTown(town) : new Dictionary<string, MasteryRecord>();
                 int now = AbsDay();
                 int tracked = 0;
                 // A loaded record is handed to the FIRST villager bearing its composite
@@ -214,9 +240,99 @@ namespace EssentialProvisions.Features
                     tracked++;
                 }
                 _hydrated = true;
-                Plugin.Log.Msg($"[WorkplaceMastery] Loaded {loaded.Count} tenure record(s); tracking {tracked} villager(s) for save \"{save}\".");
+                _boundTownKey = town;
+                WorkplaceMasteryEffects.InvalidateAll();
+                if (town.Length > 0)
+                    Plugin.Log.Msg($"[WorkplaceMastery] Loaded {loaded.Count} tenure record(s); tracking {tracked} villager(s) for town \"{town}\".");
+                else
+                    Plugin.Log.Msg($"[WorkplaceMastery] New town, not saved yet; tracking {tracked} villager(s). Tenure is written once the town has a save folder.");
             }
             catch (Exception ex) { Plugin.Log.Warning($"[WorkplaceMastery] Hydrate: {ex.Message}"); _hydrated = true; }
+        }
+
+        // The town's own sidecar if it exists. Otherwise a one-time migration from the file
+        // names EP used before the town-folder key (the save's name, the settlement name, and, for an
+        // autosave, the shared "AutoSave N" file). Records from those files bind only to
+        // villagers whose composite key matches, so another town's entries are ignored and
+        // dropped at the next save, which writes the town file.
+        private static Dictionary<string, MasteryRecord> LoadForTown(string town)
+        {
+            if (MasteryStore.Exists(town)) return MasteryStore.Load(town);
+            var used = new List<string>();
+            var merged = MasteryStore.LoadMerged(SaveIdentity.LegacyKeys(includeSharedAutosave: true), used);
+            if (used.Count > 0)
+                Plugin.Log.Msg($"[WorkplaceMastery] Migrating tenure for town \"{town}\" from older file(s): {string.Join(", ", used.ToArray())}. The next save writes \"{town}.json\".");
+            return merged;
+        }
+
+        // Committed days plus the live open tenure. Clamped like YearsFor, so a start day
+        // from a newer save of the same town counts as zero rather than negative.
+        private static int TotalDays(MasteryRecord rec, int now)
+        {
+            int total = MasteryStore.CommittedDays(rec);
+            if (rec.CurrentStartAbsDay >= 0 && AccruesMastery(rec.CurrentOcc) && now >= rec.CurrentStartAbsDay)
+                total += now - rec.CurrentStartAbsDay;
+            return total;
+        }
+
+        // A town gets its save folder only at its first save. Until then tenure lives in
+        // memory. Once the folder name appears, fold in any sidecar that already exists (a
+        // load whose name resolved late), keeping the larger tenure per villager, then write
+        // any save that fired while the name was unknown. Also the guard that stops a save
+        // from overwriting a sidecar this session never read.
+        private static void TryLateBind()
+        {
+            if (!_hydrated || _boundTownKey.Length > 0) return;
+            string town = SaveIdentity.TownKey();
+            if (town.Length == 0) return;
+            try
+            {
+                var rm = UnitySingleton<GameManager>.Instance?.resourceManager;
+                if (rm?.villagersRO == null) return;
+
+                var loaded = LoadForTown(town);
+                int now = AbsDay();
+                int adopted = 0;
+                var usedKeys = new HashSet<string>();
+                foreach (var v in rm.villagersRO)
+                {
+                    if (v == null) continue;
+                    int id = v.GetInstanceID();
+                    _byInstance.TryGetValue(id, out var live);
+                    string key = CompositeKey(v);
+                    if (loaded.TryGetValue(key, out var fromDisk) && usedKeys.Add(key) &&
+                        (live == null || TotalDays(fromDisk, now) > TotalDays(live, now)))
+                    {
+                        AlignToLiveJob(fromDisk, SafeOcc(v), now);
+                        _byInstance[id] = fromDisk;
+                        adopted++;
+                    }
+                    else if (live == null)
+                    {
+                        var fresh = new MasteryRecord();
+                        AlignToLiveJob(fresh, SafeOcc(v), now);
+                        _byInstance[id] = fresh;
+                    }
+                }
+                _boundTownKey = town;
+                WorkplaceMasteryEffects.InvalidateAll();
+                Plugin.Log.Msg($"[WorkplaceMastery] Tenure bound to town \"{town}\" ({adopted} record(s) taken from disk).");
+
+                if (_pendingWrite)
+                {
+                    _pendingWrite = false;
+                    WriteTenure(town);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Retried every frame while unbound, so log only the first failure.
+                if (!_lateBindErrorLogged)
+                {
+                    _lateBindErrorLogged = true;
+                    Plugin.Log.Warning($"[WorkplaceMastery] Late bind: {ex.Message}");
+                }
+            }
         }
 
         // Re-align tracking to current jobs without touching the disk sidecar (used when
@@ -236,6 +352,7 @@ namespace EssentialProvisions.Features
                     if (!_byInstance.TryGetValue(id, out var rec)) { rec = new MasteryRecord(); _byInstance[id] = rec; }
                     AlignToLiveJob(rec, SafeOcc(v), now);
                 }
+                WorkplaceMasteryEffects.InvalidateAll();
             }
             catch (Exception ex) { Plugin.Log.Warning($"[WorkplaceMastery] Resync: {ex.Message}"); }
         }
@@ -255,24 +372,45 @@ namespace EssentialProvisions.Features
         {
             try
             {
-                var rm = UnitySingleton<GameManager>.Instance?.resourceManager;
-                if (rm?.villagersRO == null) return;
-                int now = AbsDay();
-                var byKey = new Dictionary<string, MasteryRecord>();
-                foreach (var v in rm.villagersRO)
+                string town = SaveIdentity.TownKey();
+                if (town.Length == 0)
                 {
-                    if (v == null) continue;
-                    if (!_byInstance.TryGetValue(v.GetInstanceID(), out var rec)) continue;
-                    CommitOpen(rec, now);   // fold open days into committed; resets start to now
-                    // First-writer-wins on a key collision (deterministic). Colliding-key
-                    // villagers can't both round-trip — there's no stable id to tell them
-                    // apart on reload — but this avoids a silent last-writer overwrite.
-                    string key = CompositeKey(v);
-                    if (!byKey.ContainsKey(key)) byKey[key] = rec;
+                    // A new town's first save: FF creates the folder after this event, so
+                    // TryLateBind writes it once the folder name appears.
+                    _pendingWrite = true;
+                    return;
                 }
-                MasteryStore.Save(SaveName(), byKey);
+                if (_boundTownKey.Length == 0)
+                {
+                    TryLateBind();
+                    // Never write over a sidecar this session hasn't read.
+                    if (_boundTownKey.Length == 0) { _pendingWrite = true; return; }
+                }
+                WriteTenure(town);
             }
             catch (Exception ex) { Plugin.Log.Warning($"[WorkplaceMastery] OnStartSave: {ex.Message}"); }
+        }
+
+        // Commit open tenure and write the town's sidecar. Callers guarantee the session is
+        // bound to `town` (or that the town has no file yet).
+        private static void WriteTenure(string town)
+        {
+            var rm = UnitySingleton<GameManager>.Instance?.resourceManager;
+            if (rm?.villagersRO == null) return;
+            int now = AbsDay();
+            var byKey = new Dictionary<string, MasteryRecord>();
+            foreach (var v in rm.villagersRO)
+            {
+                if (v == null) continue;
+                if (!_byInstance.TryGetValue(v.GetInstanceID(), out var rec)) continue;
+                CommitOpen(rec, now);   // fold open days into committed; resets start to now
+                // First-writer-wins on a key collision (deterministic). Colliding-key
+                // villagers can't both round-trip — there's no stable id to tell them
+                // apart on reload — but this avoids a silent last-writer overwrite.
+                string key = CompositeKey(v);
+                if (!byKey.ContainsKey(key)) byKey[key] = rec;
+            }
+            MasteryStore.Save(town, byKey);
         }
 
         private static void OnBecame(VillagerBecameOccupationEvent e)
@@ -286,6 +424,7 @@ namespace EssentialProvisions.Features
             CommitOpen(rec, now);
             rec.CurrentOcc = (int)e.occupation;
             rec.CurrentStartAbsDay = AccruesMastery(rec.CurrentOcc) ? now : -1;
+            WorkplaceMasteryEffects.Invalidate(id);
         }
 
         private static void OnLeft(VillagerLeftOccupationEvent e)
@@ -296,6 +435,7 @@ namespace EssentialProvisions.Features
             CommitOpen(rec, AbsDay());
             rec.CurrentOcc = OccNone;
             rec.CurrentStartAbsDay = -1;
+            WorkplaceMasteryEffects.Invalidate(v.GetInstanceID());
         }
 
         // ----- Tenure math -----
@@ -336,6 +476,17 @@ namespace EssentialProvisions.Features
                 if (now >= rec.CurrentStartAbsDay) open = now - rec.CurrentStartAbsDay;
             }
             return (committed + open) / DaysPerYear;
+        }
+
+        // Tenure fraction for the villager's CURRENT job, 0..1 (1 = the 25-year cap), and that
+        // job. 0 for jobs that don't accrue mastery. Used by WorkplaceMasteryEffects, which
+        // caches it per day, so this runs at most once per villager per day.
+        internal static float CurrentTenureFraction(Villager v, out int occ)
+        {
+            occ = SafeOcc(v);
+            if (!AccruesMastery(occ)) return 0f;
+            float years = YearsFor(v.GetInstanceID(), occ);
+            return Mathf.Clamp01(years / TenureCapYears);
         }
 
         // Interop accessor (for WorkInfoApi): the current-job mastery bonus as a
@@ -398,20 +549,6 @@ namespace EssentialProvisions.Features
             {
                 return "iid:" + v.GetInstanceID();   // last-ditch; not stable across loads
             }
-        }
-
-        private static string SaveName()
-        {
-            try
-            {
-                var f = SaveManager.activeSaveFileName;
-                if (string.IsNullOrEmpty(f)) f = SaveManager.activeSettlementName;
-                if (string.IsNullOrEmpty(f)) return "";
-                if (f == "AutoSave 1" || f == "AutoSave 2")
-                    return string.IsNullOrEmpty(SaveManager.activeSettlementName) ? f : SaveManager.activeSettlementName;
-                return System.IO.Path.GetFileNameWithoutExtension(f);
-            }
-            catch { return ""; }
         }
 
         // ----- Work-rate bonus (stacks on Learned Hands; same 1-arg chokepoint) -----

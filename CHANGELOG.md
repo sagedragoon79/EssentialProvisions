@@ -1,8 +1,32 @@
 # Changelog
 
-## Unreleased
+## 1.7.0 — 2026-10-21
+
+### Added
+- **Workplace Mastery: every job improves with tenure.** Mastery used to speed up only
+  crafting, gathering, and field work. The 16 jobs it never reached now each get their own
+  effect, growing each in-game year up to a cap at 25 years:
+  - Builders build and repair, miners mine, and fishermen catch up to 25% faster.
+  - Healers heal, teachers teach, scholars research, and rat catchers clear rats up to 10%
+    faster. Priests, publicans, and librarians raise spirituality or entertainment up to
+    10%. Grocers walk up to 10% faster, guildmasters strengthen the guild bonus up to 10%,
+    and groomers raise pet births up to 10%.
+  - Traders get up to 5% better prices. This pauses while Sovereign Boons' Merchant's
+    Gambit is on, because that boon prices both of its legs through the same modifier.
+- **Mastery in Combat** (new sub-setting, on by default) — soldiers, guards, and hunters
+  hit up to 10% harder, and soldiers and guards take up to 10% less damage. Guard towers
+  hit harder with experienced guards inside. Turn it off to keep combat vanilla.
+- **Keep Clarity interop:** `WorkInfoApi.GetMasteryEffectText` and
+  `GetMasteryEffectPercent` report what mastery does for a villager's current job, such as
+  "Teaches 6% faster". The existing getters are unchanged.
 
 ### Fixed
+- **Workplace Mastery tenure appeared to revert after loading an autosave.** Every session
+  loaded from an autosave read and wrote one autosave file shared by every town, so tenure
+  earned there never reached the town's own file. Tenure is now saved per town, shared by
+  that town's manual saves and autosaves, and two towns with the same name no longer share
+  data. Existing tenure migrates automatically on first load. Penny Pincher's tower
+  exemptions got the same fix.
 - **Coal and Firewood in Storehouses had no controls.** Consumable Control keeps
   its heating-fuel reserve in Storehouses on purpose, but Storehouses didn't list
   fuel as an accepted item, so the storage window showed Coal and Firewood as bare

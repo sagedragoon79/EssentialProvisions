@@ -122,6 +122,7 @@ namespace EssentialProvisions
 
         // ----- Workplace Mastery (original EP feature: villagers work faster the longer they hold a job) -----
         public static MelonPreferences_Entry<bool> EnableWorkplaceMastery { get; private set; } = null!;
+        public static MelonPreferences_Entry<bool> WorkplaceMasteryCombat { get; private set; } = null!;
 
         // ----- Rabies: Treatable (original EP balance toggle) -----
         public static MelonPreferences_Entry<bool> EnableRabiesTreatable { get; private set; } = null!;
@@ -379,7 +380,12 @@ namespace EssentialProvisions
             EnableWorkplaceMastery = _root.CreateEntry(
                 "EnableWorkplaceMastery", false,
                 display_name: "Workplace Mastery",
-                description: "Villagers work faster the longer they hold the same job: +1% per in-game year of tenure, capped at +25% (25 years), on resource gathering, field work, AND crafting/manufacturing. Multiplicative, stacks on Learned Hands. Tenure is tracked per occupation and persists per-save; existing villagers start at 0 (Farthest Frontier stores no job-start date to seed from). Toggle is live. (No tuning slider — on/off by design; rebalanced via patches if needed.)");
+                description: "Villagers get better at their job the longer they hold it, growing each in-game year up to a cap at 25 years. Crafting, gathering, field work, building, mining, and fishing get up to 25% faster. Healers heal, teachers teach, scholars research, and rat catchers clear rats up to 10% faster; priests, publicans, and librarians raise spirituality or entertainment up to 10%; grocers walk up to 10% faster; guildmasters strengthen the guild bonus up to 10%; groomers raise pet births up to 10%. Traders get up to 5% better prices, paused while Sovereign Boons' Merchant's Gambit is on. Combat is a separate setting below. Stacks with Learned Hands. Tenure is tracked per job and saved per town; existing villagers start at 0, since Farthest Frontier stores no job-start date. Toggle is live. On/off only, no sliders.");
+
+            WorkplaceMasteryCombat = _root.CreateEntry(
+                "WorkplaceMasteryCombat", true,
+                display_name: "    Mastery in Combat",
+                description: "With Workplace Mastery on, soldiers, guards, and hunters hit up to 10% harder after 25 years in the job, and soldiers and guards take up to 10% less damage. Guard towers hit harder with experienced guards inside. Turn this off to keep combat vanilla; every other job keeps its mastery effect.");
 
             // ----- Rabies: Treatable -----
             EnableRabiesTreatable = _root.CreateEntry(
